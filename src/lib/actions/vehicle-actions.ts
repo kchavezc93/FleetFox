@@ -5,7 +5,7 @@ import type { Vehicle, VehicleFormData } from "@/types";
 import { vehicleSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { getDbClient } from "@/lib/db"; 
-// import sql from 'mssql'; // Descomentar si se instala y usa 'mssql'
+import * as sql from 'mssql';
 // import bcrypt from 'bcryptjs'; // Para ejemplos de hashing si fuera necesario aquí
 
 // PRODUCCIÓN: Consideraciones Generales para Acciones del Servidor en Producción:
@@ -43,7 +43,7 @@ export async function createVehicle(formData: VehicleFormData) {
   // PRODUCCIÓN: logger.info({ action: 'createVehicle', dbType: dbClient.type, plateNumber: data.plateNumber }, "Attempting to create vehicle");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -89,7 +89,7 @@ export async function createVehicle(formData: VehicleFormData) {
       insertRequest.input('status_ins', sql.NVarChar(50), data.status);
       insertRequest.input('imageUrl_ins', sql.NVarChar(255), imageUrl);
       // createdAt y updatedAt se manejan con GETDATE() en la consulta SQL.
-      const result = await insertRequest.query(\`
+      const result = await insertRequest.query(`
         INSERT INTO vehicles (
           plateNumber, vin, brand, model, year, fuelType, currentMileage, 
           nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, 
@@ -101,7 +101,7 @@ export async function createVehicle(formData: VehicleFormData) {
           @nextPreventiveMaintenanceMileage_ins, @nextPreventiveMaintenanceDate_ins, @status_ins, 
           GETDATE(), GETDATE(), @imageUrl_ins
         );
-      \`);
+      `);
       
       if (result.recordset.length === 0 || !result.recordset[0].id) {
         // PRODUCCIÓN: logger.error({ action: 'createVehicle', data }, "Failed to create vehicle, no ID returned from DB");
@@ -119,36 +119,36 @@ export async function createVehicle(formData: VehicleFormData) {
       
       // PRODUCCIÓN: logger.info({ action: 'createVehicle', vehicleId: newVehicle.id, plateNumber: newVehicle.plateNumber }, "Vehicle created successfully");
       revalidatePath("/vehicles"); // Revalida el caché de la página de lista de vehículos.
-      return { message: \`Vehículo \${newVehicle.plateNumber} creado exitosamente.\`, vehicle: newVehicle, success: true };
+      return { message: `Vehículo ${newVehicle.plateNumber} creado exitosamente.`, vehicle: newVehicle, success: true };
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'createVehicle', data, error: (error as Error).message, stack: (error as Error).stack }, "Error creating vehicle in SQL Server");
-      console.error(\`[SQL Server Error] Error al crear vehículo:\`, error);
+      console.error(`[SQL Server Error] Error al crear vehículo:`, error);
       return { 
-        message: \`Error al crear vehículo. Verifique los datos e inténtelo de nuevo. Detalles: \${(error as Error).message}\`, 
+        message: `Error al crear vehículo. Verifique los datos e inténtelo de nuevo. Detalles: ${(error as Error).message}`, 
         errors: { form: "Error de base de datos al crear." }, 
         success: false 
       };
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'createVehicle', dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Create Vehicle] La creación de vehículos no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`);
+    console.warn(`[Create Vehicle] La creación de vehículos no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`);
     return { 
-      message: \`Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
+      message: `Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
       vehicle: null,
       success: false,
-      errors: { form: \`Implementación SQL pendiente para \${dbClient.type}.\` },
+      errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
     };
   }
-  */
+  
   
   // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Create Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo no creado.`);
-  return { 
-    message: `Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
-    vehicle: null,
-    success: false,
-    errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
-  };
+  // console.log(`[Create Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo no creado.`);
+  // return { 
+  //   message: `Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
+  //   vehicle: null,
+  //   success: false,
+  //   errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
+  // };
 }
 
 export async function updateVehicle(id: string, formData: VehicleFormData) {
@@ -178,7 +178,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
   // PRODUCCIÓN: logger.info({ action: 'updateVehicle', dbType: dbClient.type, vehicleId: id }, "Attempting to update vehicle");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -221,7 +221,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
       updateRequest.input('status_upd_val', sql.NVarChar(50), data.status);
       // No actualizamos imageUrl aquí a menos que se provea un mecanismo para cambiarla.
       // updatedAt se maneja con GETDATE() en la consulta SQL.
-      const result = await updateRequest.query(\`
+      const result = await updateRequest.query(`
         UPDATE vehicles 
         SET 
           plateNumber = @plateNumber_upd_val, 
@@ -237,7 +237,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
           updatedAt = GETDATE()
         OUTPUT INSERTED.id, INSERTED.plateNumber, INSERTED.vin, INSERTED.brand, INSERTED.model, INSERTED.year, INSERTED.fuelType, INSERTED.currentMileage, INSERTED.nextPreventiveMaintenanceMileage, INSERTED.nextPreventiveMaintenanceDate, INSERTED.status, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
         WHERE id = @id_upd;
-      \`);
+      `);
 
       if (result.recordset.length === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'updateVehicle', vehicleId: id, reason: 'Not found or no changes' }, "Vehicle not found for update or no changes made");
@@ -263,37 +263,37 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
       
       // PRODUCCIÓN: logger.info({ action: 'updateVehicle', vehicleId: id }, "Vehicle updated successfully");
       revalidatePath("/vehicles");
-      revalidatePath(\`/vehicles/\${id}\`);
-      revalidatePath(\`/vehicles/\${id}/edit\`);
-      return { message: \`Vehículo \${updatedVehicle.plateNumber} actualizado exitosamente.\`, vehicle: updatedVehicle, success: true };
+      revalidatePath(`/vehicles/${id}`);
+      revalidatePath(`/vehicles/${id}/edit`);
+      return { message: `Vehículo ${updatedVehicle.plateNumber} actualizado exitosamente.`, vehicle: updatedVehicle, success: true };
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'updateVehicle', vehicleId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error updating vehicle in SQL Server");
-      console.error(\`[SQL Server Error] Error al actualizar vehículo ${id}:\`, error);
+      console.error(`[SQL Server Error] Error al actualizar vehículo ${id}:`, error);
       return { 
-        message: \`Error al actualizar vehículo. Detalles: \${(error as Error).message}\`, 
+        message: `Error al actualizar vehículo. Detalles: ${(error as Error).message}`, 
         errors: { form: "Error de base de datos al actualizar." }, 
         success: false 
       };
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'updateVehicle', vehicleId: id, dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Update Vehicle] La actualización de vehículos no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Update Vehicle] La actualización de vehículos no está implementada para el tipo de BD: ${dbClient.type}.`);
     return { 
-      message: \`La actualización de vehículos no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`, 
+      message: `La actualización de vehículos no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`, 
       errors: { form: "Tipo de BD no soportado para esta acción." },
       success: false,
     };
   }
-  */
   
-  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Update Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no actualizado.`);
-  return { 
-    message: `Actualización de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}.`, 
-    vehicle: null,
-    success: false,
-    errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
-  };
+  
+  // // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
+  // console.log(`[Update Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no actualizado.`);
+  // return { 
+  //   message: `Actualización de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}.`, 
+  //   vehicle: null,
+  //   success: false,
+  //   errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
+  // };
 }
 
 export async function deleteVehicle(id: string) { // This action marks as inactive
@@ -309,7 +309,7 @@ export async function deleteVehicle(id: string) { // This action marks as inacti
   // PRODUCCIÓN: logger.info({ action: 'deleteVehicle', dbType: dbClient.type, vehicleId: id }, "Attempting to mark vehicle as inactive (soft delete)");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -321,39 +321,39 @@ export async function deleteVehicle(id: string) { // This action marks as inacti
       const request = pool.request();
       request.input('id_del', sql.NVarChar(50), id);
       // Esta es una "soft delete", solo cambia el estado.
-      const result = await request.query(\`UPDATE vehicles SET status = 'Inactivo', updatedAt = GETDATE() WHERE id = @id_del;\`);
+      const result = await request.query(`UPDATE vehicles SET status = 'Inactivo', updatedAt = GETDATE() WHERE id = @id_del;`);
       
       if (result.rowsAffected[0] === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'deleteVehicle', vehicleId: id, reason: 'Not found for deactivation' }, "Vehicle not found to mark as inactive");
-        return { message: \`Vehículo ID: \${id} no encontrado para marcar como inactivo.\`, success: false };
+        return { message: `Vehículo ID: ${id} no encontrado para marcar como inactivo.`, success: false };
       }
       // PRODUCCIÓN: logger.info({ action: 'deleteVehicle', vehicleId: id, status: 'marked_inactive' }, "Vehicle marked as inactive");
       revalidatePath("/vehicles");
-      revalidatePath(\`/vehicles/\${id}\`);
-      return { message: \`Vehículo \${id} marcado como inactivo exitosamente.\`, success: true };
+      revalidatePath(`/vehicles/${id}`);
+      return { message: `Vehículo ${id} marcado como inactivo exitosamente.`, success: true };
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'deleteVehicle', vehicleId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error marking vehicle as inactive in SQL Server");
-      console.error(\`[SQL Server Error] Error al marcar como inactivo vehículo ${id}:\`, error);
-      return { message: \`Error al marcar vehículo como inactivo. Detalles: \${(error as Error).message}\`, success: false };
+      console.error(`[SQL Server Error] Error al marcar como inactivo vehículo ${id}:`, error);
+      return { message: `Error al marcar vehículo como inactivo. Detalles: ${(error as Error).message}`, success: false };
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'deleteVehicle', vehicleId: id, dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Delete Vehicle] La desactivación de vehículos no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Delete Vehicle] La desactivación de vehículos no está implementada para el tipo de BD: ${dbClient.type}.`);
     return { 
-      message: \`La desactivación de vehículos no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`, 
+      message: `La desactivación de vehículos no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`, 
       success: false 
     };
   }
-  */
   
-  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Delete Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no marcado como inactivo.`);
-  revalidatePath("/vehicles");
-  revalidatePath(`/vehicles/${id}`);
-  return { 
-    message: `Marcar vehículo ID ${id} como inactivo pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
-    success: true // Simular éxito para que la UI se actualice
-  };
+  
+  // // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
+  // console.log(`[Delete Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no marcado como inactivo.`);
+  // revalidatePath("/vehicles");
+  // revalidatePath(`/vehicles/${id}`);
+  // return { 
+  //   message: `Marcar vehículo ID ${id} como inactivo pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
+  //   success: true // Simular éxito para que la UI se actualice
+  // };
 }
 
 export async function activateVehicle(id: string) {
@@ -369,7 +369,7 @@ export async function activateVehicle(id: string) {
   // PRODUCCIÓN: logger.info({ action: 'activateVehicle', dbType: dbClient.type, vehicleId: id }, "Attempting to activate vehicle");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -380,39 +380,39 @@ export async function activateVehicle(id: string) {
     try {
       const request = pool.request();
       request.input('id_act', sql.NVarChar(50), id);
-      const result = await request.query(\`UPDATE vehicles SET status = 'Activo', updatedAt = GETDATE() WHERE id = @id_act;\`);
+      const result = await request.query(`UPDATE vehicles SET status = 'Activo', updatedAt = GETDATE() WHERE id = @id_act;`);
 
       if (result.rowsAffected[0] === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'activateVehicle', vehicleId: id, reason: 'Not found for activation' }, "Vehicle not found to activate");
-        return { message: \`Vehículo ID: \${id} no encontrado para activar.\`, success: false };
+        return { message: `Vehículo ID: ${id} no encontrado para activar.`, success: false };
       }
       // PRODUCCIÓN: logger.info({ action: 'activateVehicle', vehicleId: id, status: 'activated' }, "Vehicle activated");
       revalidatePath("/vehicles");
-      revalidatePath(\`/vehicles/\${id}\`);
-      return { message: \`Vehículo \${id} activado exitosamente.\`, success: true };
+      revalidatePath(`/vehicles/${id}`);
+      return { message: `Vehículo ${id} activado exitosamente.`, success: true };
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'activateVehicle', vehicleId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error activating vehicle in SQL Server");
-      console.error(\`[SQL Server Error] Error al activar vehículo ${id}:\`, error);
-      return { message: \`Error al activar vehículo. Detalles: \${(error as Error).message}\`, success: false };
+      console.error(`[SQL Server Error] Error al activar vehículo ${id}:`, error);
+      return { message: `Error al activar vehículo. Detalles: ${(error as Error).message}`, success: false };
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'activateVehicle', vehicleId: id, dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Activate Vehicle] La activación de vehículos no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Activate Vehicle] La activación de vehículos no está implementada para el tipo de BD: ${dbClient.type}.`);
     return { 
-      message: \`La activación de vehículos no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`, 
+      message: `La activación de vehículos no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`, 
       success: false 
     };
   }
-  */
+  
   
   // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Activate Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no activado.`);
-  revalidatePath("/vehicles");
-  revalidatePath(`/vehicles/${id}`);
-  return { 
-    message: `Activación de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
-    success: true // Simular éxito para que la UI se actualice
-  };
+  // console.log(`[Activate Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no activado.`);
+  // revalidatePath("/vehicles");
+  // revalidatePath(`/vehicles/${id}`);
+  // return { 
+  //   message: `Activación de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
+  //   success: true // Simular éxito para que la UI se actualice
+  // };
 }
 
 export async function getVehicles(): Promise<Vehicle[]> {
@@ -425,7 +425,7 @@ export async function getVehicles(): Promise<Vehicle[]> {
   // PRODUCCIÓN: logger.info({ action: 'getVehicles', dbType: dbClient.type }, "Attempting to fetch all vehicles");
   
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -457,19 +457,19 @@ export async function getVehicles(): Promise<Vehicle[]> {
       })) as Vehicle[];
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getVehicles', error: (error as Error).message, stack: (error as Error).stack }, "Error fetching vehicles from SQL Server");
-      console.error(\`[SQL Server Error] Error al obtener vehículos:\`, error);
+      console.error(`[SQL Server Error] Error al obtener vehículos:`, error);
       return []; // Devolver vacío en caso de error para no romper la UI
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'getVehicles', dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Get Vehicles] La obtención de vehículos no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Get Vehicles] La obtención de vehículos no está implementada para el tipo de BD: ${dbClient.type}.`);
     return [];
   }
-  */
   
-  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Get Vehicles] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
-  return [];
+  
+  // // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
+  // console.log(`[Get Vehicles] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
+  // return [];
 }
 
 export async function getVehicleById(id: string): Promise<Vehicle | null> {
@@ -482,7 +482,7 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
   // PRODUCCIÓN: logger.info({ action: 'getVehicleById', dbType: dbClient.type, vehicleId: id }, "Attempting to fetch vehicle by ID");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
      if (!pool) {
@@ -518,19 +518,19 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
       return null; // Vehículo no encontrado
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getVehicleById', vehicleId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error fetching vehicle by ID from SQL Server");
-      console.error(\`[SQL Server Error] Error al obtener vehículo por ID ${id}:\`, error);
+      console.error(`[SQL Server Error] Error al obtener vehículo por ID ${id}:`, error);
       return null; // Devolver null en caso de error
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'getVehicleById', vehicleId: id, dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Get Vehicle By ID] La obtención de vehículo por ID no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Get Vehicle By ID] La obtención de vehículo por ID no está implementada para el tipo de BD: ${dbClient.type}.`);
     return null;
   }
-  */
   
-  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Get Vehicle By ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id}. Devolviendo null.`);
-  return null;
+  
+  // // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
+  // console.log(`[Get Vehicle By ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id}. Devolviendo null.`);
+  // return null;
 }
 
 // Nueva función para obtener el conteo de mantenimientos próximos para el dashboard
@@ -544,7 +544,7 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
   // PRODUCCIÓN: logger.info({ action: 'getUpcomingMaintenanceCount', dbType: dbClient.type }, "Attempting to fetch upcoming maintenance count");
 
   // --- EJEMPLO DE LÓGICA DE SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -560,7 +560,7 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
       // No es necesario pasar los umbrales como parámetros SQL si son constantes aquí,
       // pero si fueran dinámicos, sí lo harías con request.input().
       // Para DATEDIFF, GETDATE() obtiene la fecha actual del servidor SQL.
-      const query = \`
+      const query = `
         SELECT COUNT(*) AS upcomingCount
         FROM vehicles
         WHERE status = 'Activo' AND (
@@ -568,7 +568,7 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
           OR
           (nextPreventiveMaintenanceMileage IS NOT NULL AND currentMileage IS NOT NULL AND (nextPreventiveMaintenanceMileage - currentMileage) BETWEEN 0 AND ${MILEAGE_THRESHOLD})
         )
-      \`;
+      `;
       const result = await request.query(query);
       
       return result.recordset[0]?.upcomingCount || 0;
@@ -579,12 +579,12 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'getUpcomingMaintenanceCount', dbType: dbClient.type, reason: 'DB type not implemented' });
-    console.warn(\`[Get Upcoming Maintenance Count] La obtención de conteo no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Get Upcoming Maintenance Count] La obtención de conteo no está implementada para el tipo de BD: ${dbClient.type}.`);
     return 0;
   }
-  */
+  
 
   // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  console.log(`[Get Upcoming Maintenance Count] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo 0.`);
-  return 0;
+  // console.log(`[Get Upcoming Maintenance Count] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo 0.`);
+  // return 0;
 }

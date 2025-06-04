@@ -6,7 +6,7 @@ import { maintenanceLogSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { redirect } from 'next/navigation';
 import { getDbClient } from "@/lib/db";
-// import sql from 'mssql'; // Descomentar si se instala y usa 'mssql': npm install mssql
+import sql from 'mssql'; // Descomentar si se instala y usa 'mssql': npm install mssql
 
 // PRODUCCIÓN: Consideraciones Generales para Acciones del Servidor en Producción:
 // 1. Logging Estructurado: Reemplazar `console.log/warn/error` con un logger estructurado.
@@ -44,7 +44,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
   // 1. Asegúrate de haber instalado 'mssql': npm install mssql
   // 2. Configura la conexión real en src/lib/db.ts y descomenta la lógica de conexión para SQLServer.
   // 3. Adapta los nombres de tabla/columna y tipos de datos SQL a tu esquema de BD.
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool; 
     if (!pool) {
@@ -57,7 +57,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
 
       // Obtener plateNumber del vehículo para denormalización (opcional, pero simplifica listados)
       let vehiclePlateNumber = "N/A";
-      const vehicleRequest = pool.request(transaction); 
+      const vehicleRequest = transaction.request(); 
       vehicleRequest.input('vehicleIdForMeta', sql.NVarChar(50), data.vehicleId);
       const vehicleResult = await vehicleRequest.query('SELECT plateNumber, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate FROM vehicles WHERE id = @vehicleIdForMeta');
       
@@ -70,7 +70,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       }
       
       // Insertar el registro de mantenimiento principal
-      const logRequest = pool.request(transaction);
+      const logRequest = transaction.request(); 
       logRequest.input('ml_vehicleId', sql.NVarChar(50), data.vehicleId);
       logRequest.input('ml_vehiclePlateNumber', sql.NVarChar(50), vehiclePlateNumber); 
       logRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
@@ -82,7 +82,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       logRequest.input('ml_nextMaintenanceDateScheduled', sql.Date, data.nextMaintenanceDateScheduled);
       logRequest.input('ml_nextMaintenanceMileageScheduled', sql.Int, data.nextMaintenanceMileageScheduled);
       
-      const resultLog = await logRequest.query(\`
+      const resultLog = await logRequest.query(`
         INSERT INTO maintenance_logs (
           vehicleId, vehiclePlateNumber, maintenanceType, executionDate, mileageAtService, 
           activitiesPerformed, cost, provider, nextMaintenanceDateScheduled, 
@@ -94,7 +94,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           @ml_activitiesPerformed, @ml_cost, @ml_provider, @ml_nextMaintenanceDateScheduled,
           @ml_nextMaintenanceMileageScheduled, GETDATE(), GETDATE()
         );
-      \`);
+      `);
         
       if (resultLog.recordset.length === 0 || !resultLog.recordset[0].id) {
         await transaction.rollback();
@@ -113,30 +113,30 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           // Necesitamos extraer la parte Base64 pura.
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
           
-          const attachmentRequest = pool.request(transaction);
+          const attachmentRequest = transaction.request(); 
           attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), newLogId); // Usar newLogId
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
           attachmentRequest.input('ad_file_type', sql.NVarChar(100), attachment.type);
           // El estilo 2 de CONVERT es para Base64 puro sin prefijo "0x"
           attachmentRequest.input('ad_file_content_base64', sql.NVarChar(sql.MAX), base64Data); 
           
-          await attachmentRequest.query(\`
+          await attachmentRequest.query(`
             INSERT INTO attached_documents (maintenance_log_id, file_name, file_type, file_content, created_at)
             VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, CONVERT(VARBINARY(MAX), @ad_file_content_base64, 2), GETDATE());
-          \`);
+          `);
         }
       }
 
       // Actualizar el vehículo con el nuevo kilometraje y las próximas fechas/kilometrajes de mantenimiento
       const vehicleDataFromDb = vehicleResult.recordset[0];
-      const updateVehicleRequest = pool.request(transaction);
+      const updateVehicleRequest = transaction.request(); 
       updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), data.vehicleId);
       // Solo actualizar currentMileage si el kilometraje del servicio es mayor
       const newCurrentMileage = Math.max(data.mileageAtService, vehicleDataFromDb.currentMileage);
       updateVehicleRequest.input('upd_v_currentMileage', sql.Int, newCurrentMileage); 
       updateVehicleRequest.input('upd_v_nextMaintDate', sql.Date, data.nextMaintenanceDateScheduled);
       updateVehicleRequest.input('upd_v_nextMaintMileage', sql.Int, data.nextMaintenanceMileageScheduled);
-      await updateVehicleRequest.query(\`
+      await updateVehicleRequest.query(`
         UPDATE vehicles 
         SET 
           currentMileage = @upd_v_currentMileage, 
@@ -144,7 +144,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           nextPreventiveMaintenanceMileage = @upd_v_nextMaintMileage,
           updatedAt = GETDATE()
         WHERE id = @upd_v_id;
-      \`);
+      `);
       
       await transaction.commit();
       
@@ -153,14 +153,14 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       if (data.newAttachments && data.newAttachments.length > 0) {
           const getAttachmentsReq = pool.request(); // Nueva request fuera de la transacción ya commiteada
           getAttachmentsReq.input('ga_log_id', sql.NVarChar(50), newLogId);
-          const attachmentsResult = await getAttachmentsReq.query(\`
+          const attachmentsResult = await getAttachmentsReq.query(`
             SELECT id, maintenance_log_id, file_name, file_type, file_content, created_at 
             FROM attached_documents WHERE maintenance_log_id = @ga_log_id
-          \`);
+          `);
           attachmentsResult.recordset.forEach(attRow => {
               let fileContentBase64 = '';
               if (attRow.file_content && Buffer.isBuffer(attRow.file_content)) {
-                const prefix = attRow.file_type ? \`data:\${attRow.file_type};base64,\` : 'data:application/octet-stream;base64,';
+                const prefix = attRow.file_type ? `data:${attRow.file_type};base64,` : 'data:application/octet-stream;base64,';
                 fileContentBase64 = prefix + attRow.file_content.toString('base64');
               }
               createdAttachments.push({
@@ -188,43 +188,37 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       // PRODUCCIÓN: logger.info({ action: 'createMaintenanceLog', logId: newLogId, vehicleId: data.vehicleId }, "Maintenance log created successfully");
       revalidatePath("/maintenance");
       revalidatePath("/vehicles"); 
-      revalidatePath(\`/vehicles/\${data.vehicleId}\`);
-      revalidatePath(\`/maintenance/\${newLogId}\`); // Para la página de detalles del log
-      return { message: \`Registro de mantenimiento creado exitosamente para \${vehiclePlateNumber}.\`, log: createdLog, success: true };
+      revalidatePath(`/vehicles/${data.vehicleId}`);
+      revalidatePath(`/maintenance/${newLogId}`); // Para la página de detalles del log
+      return { message: `Registro de mantenimiento creado exitosamente para ${vehiclePlateNumber}.`, log: createdLog, success: true };
     } catch (error) {
-      if (transaction.active) { 
-          try {
               await transaction.rollback();
-          } catch (rollbackError) {
-              console.error("Error al hacer rollback de la transacción:", rollbackError);
-              // PRODUCCIÓN: logger.error({ action: 'createMaintenanceLog', subAction: 'rollbackError', error: (rollbackError as Error).message });
-          }
-      }
+
       // PRODUCCIÓN: logger.error({ action: 'createMaintenanceLog', data, error: (error as Error).message, stack: (error as Error).stack }, "Error creating maintenance log");
-      console.error(\`[SQL Server Error] Error al crear registro de mantenimiento:\`, error);
+      console.error(`[SQL Server Error] Error al crear registro de mantenimiento:`, error);
       return { 
-        message: \`Error al crear registro de mantenimiento. Detalles: \${(error as Error).message}\`, 
+        message: `Error al crear registro de mantenimiento. Detalles: ${(error as Error).message}`, 
         errors: { form: "Error de base de datos al crear." }, 
         success: false
       };
     }
   } else {
-     console.warn(\`[Create Maintenance Log] La creación de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}.\`);
+     console.warn(`[Create Maintenance Log] La creación de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}.`);
      return { 
-        message: \`La creación de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`, 
+        message: `La creación de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`, 
         errors: { form: "Tipo de BD no soportado para esta acción." }, 
         success: false 
       };
   }
-  */
   
-  console.log(`[Create Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro no creado.`);
-  return { 
-    message: `Creación de registro de mantenimiento pendiente de implementación SQL para ${dbClient.type}.`, 
-    log: null, 
-    success: false,
-    errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` }
-  };
+  
+  // console.log(`[Create Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro no creado.`);
+  // return { 
+  //   message: `Creación de registro de mantenimiento pendiente de implementación SQL para ${dbClient.type}.`, 
+  //   log: null, 
+  //   success: false,
+  //   errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` }
+  // };
 }
 
 export async function updateMaintenanceLog(id: string, formData: MaintenanceFormData) {
@@ -256,7 +250,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
   // 1. Asegúrate de haber instalado 'mssql': npm install mssql
   // 2. Configura la conexión real en src/lib/db.ts y descomenta la lógica de conexión para SQLServer.
   // 3. Adapta los nombres de tabla/columna y tipos de datos SQL a tu esquema de BD.
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -268,7 +262,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       await transaction.begin();
 
       // Obtener el vehicleId del log existente para actualizar el vehículo después
-      const getLogRequest = pool.request(transaction);
+      const getLogRequest = transaction.request(); 
       getLogRequest.input('logIdForVehicleInfo', sql.NVarChar(50), id);
       const logInfoResult = await getLogRequest.query('SELECT vehicleId, vehiclePlateNumber FROM maintenance_logs WHERE id = @logIdForVehicleInfo');
       if (logInfoResult.recordset.length === 0) {
@@ -280,7 +274,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       const existingLogPlateNumber = logInfoResult.recordset[0].vehiclePlateNumber;
 
       // Actualizar el registro de mantenimiento principal
-      const logUpdateRequest = pool.request(transaction);
+      const logUpdateRequest = transaction.request(); 
       logUpdateRequest.input('ml_id', sql.NVarChar(50), id);
       logUpdateRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
       logUpdateRequest.input('ml_executionDate', sql.Date, data.executionDate);
@@ -291,7 +285,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       logUpdateRequest.input('ml_nextMaintenanceDateScheduled', sql.Date, data.nextMaintenanceDateScheduled);
       logUpdateRequest.input('ml_nextMaintenanceMileageScheduled', sql.Int, data.nextMaintenanceMileageScheduled);
       
-      const resultLogUpdate = await logUpdateRequest.query(\`
+      const resultLogUpdate = await logUpdateRequest.query(`
         UPDATE maintenance_logs 
         SET 
           maintenanceType = @ml_maintenanceType, 
@@ -305,7 +299,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
           updatedAt = GETDATE()
         OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt 
         WHERE id = @ml_id;
-      \`);
+      `);
       
       if (resultLogUpdate.recordset.length === 0) {
         await transaction.rollback();
@@ -317,7 +311,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       // Manejar adjuntos: eliminar los marcados y agregar los nuevos
       if (data.attachmentsToRemove && data.attachmentsToRemove.length > 0) {
         for (const attachmentIdToRemove of data.attachmentsToRemove) {
-          const deleteAttachmentRequest = pool.request(transaction);
+          const deleteAttachmentRequest = transaction.request(); 
           deleteAttachmentRequest.input('ad_id_to_remove', sql.NVarChar(50), attachmentIdToRemove);
           deleteAttachmentRequest.input('ad_log_id_check', sql.NVarChar(50), id); // Asegurar que el adjunto pertenece al log
           await deleteAttachmentRequest.query('DELETE FROM attached_documents WHERE id = @ad_id_to_remove AND maintenance_log_id = @ad_log_id_check;');
@@ -327,21 +321,21 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       if (data.newAttachments && data.newAttachments.length > 0) {
         for (const attachment of data.newAttachments) {
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
-          const attachmentRequest = pool.request(transaction);
+          const attachmentRequest = transaction.request(); 
           attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), id); // Usar el ID del log que se está actualizando
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
           attachmentRequest.input('ad_file_type', sql.NVarChar(100), attachment.type);
           attachmentRequest.input('ad_file_content_base64', sql.NVarChar(sql.MAX), base64Data);
           
-          await attachmentRequest.query(\`
+          await attachmentRequest.query(`
             INSERT INTO attached_documents (maintenance_log_id, file_name, file_type, file_content, created_at)
             VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, CONVERT(VARBINARY(MAX), @ad_file_content_base64, 2), GETDATE());
-          \`);
+          `);
         }
       }
 
       // Actualizar el vehículo (asegurándose de tener el vehicleId correcto)
-      const vehicleOriginalDataRequest = pool.request(transaction);
+      const vehicleOriginalDataRequest = transaction.request(); 
       vehicleOriginalDataRequest.input('v_id_for_update', sql.NVarChar(50), existingLogVehicleId);
       const vehicleOriginalDataResult = await vehicleOriginalDataRequest.query('SELECT currentMileage FROM vehicles WHERE id = @v_id_for_update');
       if (vehicleOriginalDataResult.recordset.length === 0) {
@@ -351,13 +345,13 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       }
       const originalVehicleMileage = vehicleOriginalDataResult.recordset[0].currentMileage;
 
-      const updateVehicleRequest = pool.request(transaction);
+      const updateVehicleRequest = transaction.request(); 
       updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), existingLogVehicleId);
       const newCurrentMileageForVehicle = Math.max(data.mileageAtService, originalVehicleMileage);
       updateVehicleRequest.input('upd_v_currentMileage', sql.Int, newCurrentMileageForVehicle); 
       updateVehicleRequest.input('upd_v_nextMaintDate', sql.Date, data.nextMaintenanceDateScheduled);
       updateVehicleRequest.input('upd_v_nextMaintMileage', sql.Int, data.nextMaintenanceMileageScheduled);
-      await updateVehicleRequest.query(\`
+      await updateVehicleRequest.query(`
         UPDATE vehicles 
         SET 
           currentMileage = @upd_v_currentMileage, 
@@ -365,7 +359,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
           nextPreventiveMaintenanceMileage = @upd_v_nextMaintMileage,
           updatedAt = GETDATE()
         WHERE id = @upd_v_id;
-      \`);
+      `);
       
       await transaction.commit();
       
@@ -373,14 +367,14 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       const allAttachments: AttachedDocument[] = [];
       const getAllAttachmentsReq = pool.request(); // Nueva request fuera de la transacción
       getAllAttachmentsReq.input('ga_log_id_updated', sql.NVarChar(50), id);
-      const attachmentsResultUpdated = await getAllAttachmentsReq.query(\`
+      const attachmentsResultUpdated = await getAllAttachmentsReq.query(`
         SELECT id, maintenance_log_id, file_name, file_type, file_content, created_at 
         FROM attached_documents WHERE maintenance_log_id = @ga_log_id_updated
-      \`);
+      `);
       attachmentsResultUpdated.recordset.forEach(attRow => {
           let fileContentBase64 = '';
           if (attRow.file_content && Buffer.isBuffer(attRow.file_content)) {
-            const prefix = attRow.file_type ? \`data:\${attRow.file_type};base64,\` : 'data:application/octet-stream;base64,';
+            const prefix = attRow.file_type ? `data:${attRow.file_type};base64,` : 'data:application/octet-stream;base64,';
             fileContentBase64 = prefix + attRow.file_content.toString('base64');
           }
           allAttachments.push({
@@ -407,45 +401,38 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       
       // PRODUCCIÓN: logger.info({ action: 'updateMaintenanceLog', logId: id }, "Maintenance log updated successfully");
       revalidatePath("/maintenance");
-      revalidatePath(\`/maintenance/\${id}\`);
-      revalidatePath(\`/maintenance/\${id}/edit\`);
+      revalidatePath(`/maintenance/${id}`);
+      revalidatePath(`/maintenance/${id}/edit`);
       revalidatePath("/vehicles");
-      revalidatePath(\`/vehicles/\${updatedLog.vehicleId}\`);
-      return { message: \`Registro de mantenimiento para \${updatedLog.vehiclePlateNumber} actualizado exitosamente.\`, log: updatedLog, success: true };
+      revalidatePath(`/vehicles/${updatedLog.vehicleId}`);
+      return { message: `Registro de mantenimiento para ${updatedLog.vehiclePlateNumber} actualizado exitosamente.`, log: updatedLog, success: true };
     } catch (error) {
-      if (transaction.active) {
-          try {
               await transaction.rollback();
-          } catch (rollbackError) {
-              console.error("Error al hacer rollback de la transacción:", rollbackError);
-              // PRODUCCIÓN: logger.error({ action: 'updateMaintenanceLog', subAction: 'rollbackError', error: (rollbackError as Error).message });
-          }
-      }
+
       // PRODUCCIÓN: logger.error({ action: 'updateMaintenanceLog', logId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error updating maintenance log");
-      console.error(\`[SQL Server Error] Error al actualizar registro de mantenimiento ${id}:\`, error);
+      console.error(`[SQL Server Error] Error al actualizar registro de mantenimiento ${id}:`, error);
       return { 
-        message: \`Error al actualizar registro de mantenimiento. Detalles: \${(error as Error).message}\`, 
+        message: `Error al actualizar registro de mantenimiento. Detalles: ${(error as Error).message}`, 
         errors: { form: "Error de base de datos al actualizar." }, 
         success: false
       };
     }
   } else {
-    console.warn(\`[Update Maintenance Log] La actualización de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Update Maintenance Log] La actualización de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}.`);
     return { 
-      message: \`La actualización de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`, 
+      message: `La actualización de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`, 
       errors: { form: "Tipo de BD no soportado para esta acción." }, 
       success: false 
     };
   }
-  */
   
-  console.log(`[Update Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro ID: ${id} no actualizado.`);
-  return { 
-    message: `Actualización de registro de mantenimiento ID ${id} pendiente de implementación SQL para ${dbClient.type}.`, 
-    log: null, 
-    success: false,
-    errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` }
-  };
+  // console.log(`[Update Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro ID: ${id} no actualizado.`);
+  // return { 
+  //   message: `Actualización de registro de mantenimiento ID ${id} pendiente de implementación SQL para ${dbClient.type}.`, 
+  //   log: null, 
+  //   success: false,
+  //   errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` }
+  // };
 }
 
 export async function deleteMaintenanceLog(id: string) {
@@ -463,7 +450,7 @@ export async function deleteMaintenanceLog(id: string) {
   // 2. Configura la conexión real en src/lib/db.ts y descomenta la lógica de conexión para SQLServer.
   // 3. Adapta los nombres de tabla/columna y tipos de datos SQL a tu esquema de BD.
   // 4. Considera usar una transacción para asegurar que ambas eliminaciones (adjuntos y log) sean atómicas.
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -476,13 +463,13 @@ export async function deleteMaintenanceLog(id: string) {
       await transaction.begin();
       
       // Primero eliminar adjuntos asociados de la tabla 'attached_documents'
-      const deleteAttachmentsRequest = pool.request(transaction);
+      const deleteAttachmentsRequest = transaction.request(); 
       deleteAttachmentsRequest.input('logIdToDeleteAttachments', sql.NVarChar(50), id);
       await deleteAttachmentsRequest.query('DELETE FROM attached_documents WHERE maintenance_log_id = @logIdToDeleteAttachments;');
       // PRODUCCIÓN: logger.info({ action: 'deleteMaintenanceLog', logId: id, subAction: 'attachmentsDeleted' });
 
       // Luego eliminar el registro de mantenimiento principal de 'maintenance_logs'
-      const deleteLogRequest = pool.request(transaction);
+      const deleteLogRequest = transaction.request(); 
       deleteLogRequest.input('logIdToDelete', sql.NVarChar(50), id);
       const result = await deleteLogRequest.query('DELETE FROM maintenance_logs WHERE id = @logIdToDelete;');
       
@@ -490,30 +477,25 @@ export async function deleteMaintenanceLog(id: string) {
 
       if (result.rowsAffected[0] === 0) {
         // No se encontró el log principal.
-        console.warn(\`[Delete Maintenance Log] Maintenance log ID: \${id} no encontrado para eliminar, o ya estaba eliminado.\`);
+        console.warn(`[Delete Maintenance Log] Maintenance log ID: ${id} no encontrado para eliminar, o ya estaba eliminado.`);
         // PRODUCCIÓN: logger.warn({ action: 'deleteMaintenanceLog', logId: id, reason: 'Log not found for deletion or already deleted' });
       } else {
         // PRODUCCIÓN: logger.info({ action: 'deleteMaintenanceLog', logId: id, status: 'success' });
       }
     } catch (error) {
-      if (transaction.active) {
-        try {
+
             await transaction.rollback();
-        } catch (rollbackError) {
-            console.error("Error al hacer rollback de la transacción:", rollbackError);
-            // PRODUCCIÓN: logger.error({ action: 'deleteMaintenanceLog', subAction: 'rollbackError', error: (rollbackError as Error).message });
-        }
-      }
+
       // PRODUCCIÓN: logger.error({ action: 'deleteMaintenanceLog', logId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error deleting maintenance log");
-      console.error(\`[SQL Server Error] Error al eliminar registro de mantenimiento ${id}:\`, error);
-      throw new Error(\`Error al eliminar registro de mantenimiento: \${(error as Error).message}\`);
+      console.error(`[SQL Server Error] Error al eliminar registro de mantenimiento ${id}:`, error);
+      throw new Error(`Error al eliminar registro de mantenimiento: ${(error as Error).message}`);
     }
   } else {
-    console.warn(\`[Delete Maintenance Log] La eliminación de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}.`);
+    console.warn(`[Delete Maintenance Log] La eliminación de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}.`);
     // PRODUCCIÓN: logger.warn({ action: 'deleteMaintenanceLog', logId: id, dbType: dbClient.type, reason: 'Unsupported DB type for deletion' });
-    throw new Error(\`Eliminación no soportada para el tipo de BD: \${dbClient.type}\`);
+    throw new Error(`Eliminación no soportada para el tipo de BD: ${dbClient.type}`);
   }
-  */
+  
   
   console.log(`[Delete Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro ID: ${id} no eliminado.`);
   revalidatePath("/maintenance");
@@ -535,7 +517,7 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
   // 1. Asegúrate de haber instalado 'mssql': npm install mssql
   // 2. Configura la conexión real en src/lib/db.ts y descomenta la lógica de conexión para SQLServer.
   // 3. Adapta los nombres de tabla/columna y tipos de datos SQL a tu esquema de BD.
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -547,7 +529,7 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
       const request = pool.request();
       // Para la lista general, no traeremos el contenido de los adjuntos para mantener el rendimiento.
       // Podríamos traer una cuenta de adjuntos o una bandera si tiene adjuntos.
-      const result = await request.query(\`
+      const result = await request.query(`
         SELECT 
           ml.id, ml.vehicleId, ml.vehiclePlateNumber, ml.maintenanceType, ml.executionDate, ml.mileageAtService,
           ml.activitiesPerformed, ml.cost, ml.provider, ml.nextMaintenanceDateScheduled,
@@ -555,7 +537,7 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
           (SELECT COUNT(*) FROM attached_documents ad WHERE ad.maintenance_log_id = ml.id) AS attachmentCount 
         FROM maintenance_logs ml
         ORDER BY ml.executionDate DESC, ml.createdAt DESC
-      \`);
+      `);
       return result.recordset.map(row => ({
         id: row.id.toString(),
         vehicleId: row.vehicleId,
@@ -579,14 +561,14 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
       return [];
     }
   } else {
-    console.warn(\`[Get Maintenance Logs] La obtención de registros de mantenimiento no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Get Maintenance Logs] La obtención de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}.`);
     // PRODUCCIÓN: logger.warn({ action: 'getMaintenanceLogs', dbType: dbClient.type, reason: 'Unsupported DB type' });
     return [];
   }
-  */
   
-  console.log(`[Get Maintenance Logs] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
-  return [];
+  
+  // console.log(`[Get Maintenance Logs] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
+  // return [];
 }
 
 export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog | null> {
@@ -602,7 +584,7 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
   // 1. Asegúrate de haber instalado 'mssql': npm install mssql
   // 2. Configura la conexión real en src/lib/db.ts y descomenta la lógica de conexión para SQLServer.
   // 3. Adapta los nombres de tabla/columna y tipos de datos SQL a tu esquema de BD.
-  /*
+  
   if (dbClient.type === "SQLServer") {
     const pool = (dbClient as any).pool as sql.ConnectionPool;
     if (!pool) {
@@ -614,14 +596,14 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
       // Obtener el registro de mantenimiento principal
       const logRequest = pool.request();
       logRequest.input('logIdToFind', sql.NVarChar(50), id);
-      const logResult = await logRequest.query(\`
+      const logResult = await logRequest.query(`
         SELECT 
           id, vehicleId, vehiclePlateNumber, maintenanceType, executionDate, mileageAtService,
           activitiesPerformed, cost, provider, nextMaintenanceDateScheduled,
           nextMaintenanceMileageScheduled, createdAt, updatedAt
         FROM maintenance_logs 
         WHERE id = @logIdToFind
-      \`);
+      `);
       
       if (logResult.recordset.length === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'getMaintenanceLogById', logId: id, reason: 'Log not found' });
@@ -632,18 +614,18 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
       // Obtener los adjuntos asociados
       const attachmentsRequest = pool.request();
       attachmentsRequest.input('logIdForAttachments', sql.NVarChar(50), id);
-      const attachmentsResult = await attachmentsRequest.query(\`
+      const attachmentsResult = await attachmentsRequest.query(`
         SELECT id, maintenance_log_id, file_name, file_type, file_content, created_at
         FROM attached_documents
         WHERE maintenance_log_id = @logIdForAttachments
         ORDER BY created_at DESC
-      \`);
+      `);
 
       const attachments: AttachedDocument[] = attachmentsResult.recordset.map(rowAtt => {
         let fileContentBase64: string = ''; // Default
         if (rowAtt.file_content && Buffer.isBuffer(rowAtt.file_content)) {
           // Crear el Data URI completo para el frontend
-          const prefix = rowAtt.file_type ? \`data:\${rowAtt.file_type};base64,\` : 'data:application/octet-stream;base64,';
+          const prefix = rowAtt.file_type ? `data:${rowAtt.file_type};base64,` : 'data:application/octet-stream;base64,';
           fileContentBase64 = prefix + rowAtt.file_content.toString('base64');
         }
         return {
@@ -675,18 +657,18 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
 
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getMaintenanceLogById', logId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error fetching maintenance log by ID");
-      console.error(\`[SQL Server Error] Error al obtener registro de mantenimiento por ID ${id}:\`, error);
+      console.error(`[SQL Server Error] Error al obtener registro de mantenimiento por ID ${id}:`, error);
       return null;
     }
   } else {
-    console.warn(\`[Get Maintenance Log By ID] La obtención de registro de mantenimiento por ID no está implementada para el tipo de BD: \${dbClient.type}.\`);
+    console.warn(`[Get Maintenance Log By ID] La obtención de registro de mantenimiento por ID no está implementada para el tipo de BD: ${dbClient.type}.`);
     // PRODUCCIÓN: logger.warn({ action: 'getMaintenanceLogById', logId: id, dbType: dbClient.type, reason: 'Unsupported DB type' });
     return null;
   }
-  */
   
-  console.log(`[Get Maintenance Log By ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Log ID: ${id}. Devolviendo null.`);
-  return null;
+  
+  // console.log(`[Get Maintenance Log By ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Log ID: ${id}. Devolviendo null.`);
+  // return null;
 }
 
 export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<MaintenanceLog[]> {
@@ -698,7 +680,7 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
     
     // PRODUCCIÓN: logger.info({ action: 'getMaintenanceLogsByVehicleId', dbType: dbClient.type, vehicleId }, "Attempting to fetch maintenance logs for vehicle");
     // --- Ejemplo de Implementación para SQL Server ---
-    /*
+    
     if (dbClient.type === "SQLServer") {
       const pool = (dbClient as any).pool as sql.ConnectionPool;
       if (!pool) {
@@ -711,7 +693,7 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
         request.input('targetVehicleId', sql.NVarChar(50), vehicleId);
         // Similar a getMaintenanceLogs, no traer adjuntos completos aquí por rendimiento.
         // Podrías considerar traer un conteo de adjuntos si es necesario para la UI.
-        const result = await request.query(\`
+        const result = await request.query(`
           SELECT 
             id, vehicleId, vehiclePlateNumber, maintenanceType, executionDate, mileageAtService,
             activitiesPerformed, cost, provider, nextMaintenanceDateScheduled,
@@ -720,7 +702,7 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
           FROM maintenance_logs ml
           WHERE vehicleId = @targetVehicleId 
           ORDER BY executionDate DESC, createdAt DESC
-        \`);
+        `);
         return result.recordset.map(row => ({
           id: row.id.toString(),
           vehicleId: row.vehicleId,
@@ -739,17 +721,17 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
         })) as MaintenanceLog[];
       } catch (error) {
         // PRODUCCIÓN: logger.error({ action: 'getMaintenanceLogsByVehicleId', vehicleId, error: (error as Error).message, stack: (error as Error).stack }, "Error fetching maintenance logs for vehicle");
-        console.error(\`[SQL Server Error] Error al obtener registros de mantenimiento para vehículo ID ${vehicleId}:\`, error);
+        console.error(`[SQL Server Error] Error al obtener registros de mantenimiento para vehículo ID ${vehicleId}:`, error);
         return [];
       }
     } else {
-      console.warn(\`[Get Maintenance Logs By Vehicle ID] La obtención de registros por ID de vehículo no está implementada para: \${dbClient.type}.\`);
+      console.warn(`[Get Maintenance Logs By Vehicle ID] La obtención de registros por ID de vehículo no está implementada para: ${dbClient.type}.`);
       // PRODUCCIÓN: logger.warn({ action: 'getMaintenanceLogsByVehicleId', vehicleId, dbType: dbClient.type, reason: 'Unsupported DB type' });
       return [];
     }
-    */
     
-    console.log(`[Get Maintenance Logs By Vehicle ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${vehicleId}. Devolviendo lista vacía.`);
-    return [];
+    
+    // console.log(`[Get Maintenance Logs By Vehicle ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${vehicleId}. Devolviendo lista vacía.`);
+    // return [];
 }
 

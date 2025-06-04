@@ -8,11 +8,25 @@ import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 // Removed: import type { MaintenanceFormData } from "@/types";
 
-export default async function EditMaintenanceLogPage({ params }: { params: { id: string } }) {
-  const maintenanceLog = await getMaintenanceLogById(params.id);
-  const vehicles = await getVehicles(); // Fetch all vehicles for the dropdown
-  const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+// export default async function EditMaintenanceLogPage({ params }: { params: { id: string } }) {
+//   const maintenanceLog = await getMaintenanceLogById(params.id);
+//   const vehicles = await getVehicles(); // Fetch all vehicles for the dropdown
+//   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+  export default async function EditMaintenanceLogPage({
+    params,
+  }: {
+    params: { id: string };
+  }) {
+    const id = params.id;
 
+    const [maintenanceLog, vehicles] = await Promise.all([
+      getMaintenanceLogById(id),
+      getVehicles(),
+    ]);
+
+    const activeVehicles = vehicles.filter(
+      (v) => v.status === "Activo" || v.status === "En Taller"
+    );
 
   if (!maintenanceLog) {
     notFound();
@@ -20,7 +34,7 @@ export default async function EditMaintenanceLogPage({ params }: { params: { id:
   
   // The server action 'updateMaintenanceLog' expects (id, formData).
   // We bind the 'params.id' to it, so MaintenanceForm can call it with just 'formData'.
-  const boundUpdateMaintenanceLog = updateMaintenanceLog.bind(null, params.id);
+  const boundUpdateMaintenanceLog = updateMaintenanceLog.bind(null, id);
 
   return (
     <>

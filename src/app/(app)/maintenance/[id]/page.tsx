@@ -37,17 +37,34 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
   );
 }
 
-export default async function MaintenanceLogDetailsPage({ params }: { params: { id: string } }) {
-  const log = await getMaintenanceLogById(params.id);
+// export default async function MaintenanceLogDetailsPage({ params }: { params: { id: string } }) {
+//   const log = await getMaintenanceLogById(params.id);
 
-  if (!log) {
-    notFound();
-  }
+//   if (!log) {
+//     notFound();
+//   }
   
-  const handleDeleteAction = async () => {
-    "use server";
-    await deleteMaintenanceLog(log.id);
-  };
+//   const handleDeleteAction = async () => {
+//     "use server";
+//     await deleteMaintenanceLog(log.id);
+//   };
+
+  export default async function MaintenanceLogDetailsPage({
+    params,
+  }: {
+    params: { id: string };
+  }) {
+    const id = params.id;
+    const log = await getMaintenanceLogById(id);
+
+    if (!log) {
+      notFound();
+    }
+
+    const handleDeleteAction = async () => {
+      "use server";
+      await deleteMaintenanceLog(id);
+    };
 
   return (
     <>

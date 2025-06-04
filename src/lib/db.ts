@@ -5,12 +5,12 @@
 import fs from "fs/promises";
 import path from "path";
 import { dbConnectionSchema, type DbConnectionSchema } from "@/lib/zod-schemas";
-// import sql from 'mssql'; // Descomentar si se instala y usa 'mssql': npm install mssql
+import sql from 'mssql'; // Asegúrate de tener instalado 'mssql': npm install mssql
 
 const DB_CONFIG_PATH = path.resolve(process.cwd(), "src", "db.config.json");
 
 let cachedDbConfig: DbConnectionSchema | null | undefined = undefined;
-// let dbPool: sql.ConnectionPool | null = null; // Descomentar si se usa un pool de mssql global
+let dbPool: any /*sql.ConnectionPool*/ | null = null; // Descomentar si se usa un pool de mssql global
 
 // Carga la configuración de la base de datos.
 // Prioriza variables de entorno, luego intenta leer src/db.config.json como fallback para desarrollo local.
@@ -71,7 +71,7 @@ export async function loadDbConfig(): Promise<DbConnectionSchema | null> {
 export interface DbClient {
   type: string;
   configUsed: DbConnectionSchema;
-  // pool?: sql.ConnectionPool; // Descomentar para mssql
+  pool?: any; // Use 'any' or 'sql.ConnectionPool' if 'mssql' is installed and imported
 }
 
 export async function getDbClient(): Promise<DbClient | null> {
@@ -83,7 +83,7 @@ export async function getDbClient(): Promise<DbClient | null> {
 
   // --- EJEMPLO DE IMPLEMENTACIÓN DE CONEXIÓN REAL PARA SQL SERVER ---
   // --- (DESCOMENTAR Y ADAPTAR CUANDO ESTÉS LISTO PARA CONECTAR) ---
-  /*
+  
   if (config.dbType === "SQLServer") {
     if (dbPool && dbPool.connected) {
       console.log("[SQL Server] Usando pool de conexión cacheado y activo.");
@@ -124,7 +124,7 @@ export async function getDbClient(): Promise<DbClient | null> {
             dbPool = new sql.ConnectionPool(poolConfig);
             await dbPool.connect();
             
-            dbPool.on('error', err => {
+            dbPool.on('error', (err: any) => {
                 console.error('[SQL Server Pool Error]', err);
                 // dbPool = null; // Podrías querer anularlo para forzar recreación
             });
@@ -140,7 +140,7 @@ export async function getDbClient(): Promise<DbClient | null> {
     return null; // Debería ser inalcanzable si la lógica del pool es correcta
   }
   // --- FIN DEL EJEMPLO PARA SQL SERVER ---
-  */
+  
 
   console.warn(`[DB Client] Lógica de conexión para tipo de BD '${config.dbType}' no implementada o comentada en src/lib/db.ts. Se requiere implementación real.`);
   return {
