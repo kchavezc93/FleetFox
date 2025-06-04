@@ -1,0 +1,169 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+@layer base {
+  :root {
+    /* Derived from Dos Robles Logo */
+    --background: 0 0% 100%; /* white */
+    --foreground: 130 23% 22%; /* very dark green for text on white */
+    
+    --card: 0 0% 100%; /* white */
+    --card-foreground: 130 23% 22%; /* very dark green */
+    
+    --popover: 0 0% 100%; /* white */
+    --popover-foreground: 130 23% 22%; /* very dark green */
+    
+    --primary: 130 23% 29%; /* Dark green from "Dos Robles" text / "dr" logo */
+    --primary-foreground: 0 0% 100%; /* white for text on primary green */
+    
+    --secondary: 130 15% 90%; /* A very light, slightly greenish gray for less emphasis */
+    --secondary-foreground: 130 23% 25%; /* Darker green for text on secondary */
+    
+    --muted: 130 15% 95%; /* An even lighter, slightly greenish gray */
+    --muted-foreground: 130 20% 45%; /* Medium dark green for muted text */
+    
+    --accent: 0 57% 50%; /* Red from the apple */
+    --accent-foreground: 0 0% 100%; /* white for text on red accent */
+    
+    --destructive: 0 70% 55%; /* A general purpose error red */
+    --destructive-foreground: 0 0% 100%; /* white */
+    
+    --border: 130 15% 85%; /* A light greenish gray for borders */
+    --input: 130 15% 97%; /* Almost white with a hint of green for input backgrounds */
+    --ring: 130 23% 35%; /* Slightly lighter/brighter primary green for focus rings */
+    
+    --chart-1: 130 23% 29%;  /* primary green */
+    --chart-2: 0 57% 50%;  /* accent red */
+    --chart-3: 100 30% 45%; /* a different green - from leaf for variation */
+    --chart-4: 0 0% 60%;     /* medium gray */
+    --chart-5: 130 23% 20%;  /* darker primary green */
+    
+    --radius: 0.5rem;
+
+    /* Sidebar specific vars */
+    --sidebar-background: 130 20% 97%;      /* very light green */
+    --sidebar-foreground: 130 23% 20%;      /* dark green text */
+    --sidebar-primary: 130 23% 29%;        /* primary green */
+    --sidebar-primary-foreground: 0 0% 100%; /* white */
+    --sidebar-accent: 130 20% 92%;         /* lighter green for hover */
+    --sidebar-accent-foreground: 130 23% 20%; /* dark green text */
+    --sidebar-border: 130 20% 88%;        /* slightly darker light green for border */
+    --sidebar-ring: 130 23% 35%;         /* ring color */
+  }
+
+  .dark {
+    /* Dark theme derived from Dos Robles Logo */
+    --background: 130 10% 10%; /* very dark, desaturated green */
+    --foreground: 0 0% 95%;   /* off-white text */
+
+    --card: 130 10% 12%;    /* dark card bg */
+    --card-foreground: 0 0% 95%; /* off-white card text */
+
+    --popover: 130 10% 12%; /* dark popover bg */
+    --popover-foreground: 0 0% 95%; /* off-white popover text */
+
+    --primary: 130 35% 50%; /* a brighter green for dark mode */
+    --primary-foreground: 0 0% 10%; /* very dark text for contrast */
+
+    --secondary: 130 10% 15%; /* dark gray-green */
+    --secondary-foreground: 0 0% 80%; /* light gray text */
+
+    --muted: 130 10% 20%;   /* darker gray-green */
+    --muted-foreground: 0 0% 60%; /* medium-light gray text */
+
+    --accent: 0 60% 60%; /* brighter red for accent on dark */
+    --accent-foreground: 0 0% 10%; /* very dark text */
+
+    --destructive: 0 65% 55%; /* a slightly less intense red for dark mode */
+    --destructive-foreground: 0 0% 100%; /* white */
+
+    --border: 130 10% 25%;  /* dark border */
+    --input: 130 10% 18%;   /* dark input bg */
+    --ring: 130 35% 55%;   /* brighter green ring */
+
+    --chart-1: 130 35% 50%; /* primary green (dark) */
+    --chart-2: 0 60% 60%; /* accent red (dark) */
+    --chart-3: 100 40% 55%;    /* brighter leaf green (dark) */
+    --chart-4: 0 0% 50%;    /* medium gray (dark) */
+    --chart-5: 130 30% 40%; /* medium-dark green */
+
+    /* Sidebar specific vars for dark theme */
+    --sidebar-background: 130 10% 8%;  /* very dark sidebar */
+    --sidebar-foreground: 0 0% 90%; /* light text */
+    --sidebar-primary: 130 35% 50%;   /* primary green (dark) */
+    --sidebar-primary-foreground: 0 0% 10%; /* dark text */
+    --sidebar-accent: 130 10% 15%;    /* dark hover */
+    --sidebar-accent-foreground: 0 0% 90%; /* light text on hover */
+    --sidebar-border: 130 10% 20%;   /* dark border */
+    --sidebar-ring: 130 35% 55%;    /* ring */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@media print {
+  body {
+    background-color: white !important; /* Ensure white background for print */
+    color: black !important; /* Ensure black text for print */
+  }
+  /* Hide elements not relevant for printing */
+  [data-sidebar="sidebar"], 
+  header, /* Assuming the main header is a <header> tag or has a class 'header' */
+  .no-print, /* Add this class to any element you want to hide */
+  [data-sidebar="trigger"],
+  [data-sidebar="rail"] {
+    display: none !important;
+  }
+
+  /* Ensure main content takes full width */
+  main, .printable-area {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Reset specific page header styles if needed */
+  .page-header-actions { /* Example class for PageHeader actions container */
+     display: none !important;
+  }
+
+  /* Improve table visibility */
+  table, th, td {
+    border: 1px solid #ccc !important; /* Add borders to tables */
+    color: black !important;
+  }
+  thead {
+    background-color: #f0f0f0 !important; /* Light gray for table header */
+  }
+  
+  /* Remove shadows from cards */
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #eee !important;
+  }
+
+  /* Ensure links are still visible and identifiable if needed, or styled plainly */
+  a {
+    text-decoration: none;
+    color: black !important;
+  }
+  
+  /* Hide placeholder images specifically */
+  img[src*="placehold.co"] {
+    display: none !important;
+  }
+}

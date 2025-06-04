@@ -1,0 +1,17 @@
+
+# Settings to manage and configure a Firebase App Hosting backend.
+# https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  # PRODUCCIÓN: Revisa y ajusta estas configuraciones para un entorno de producción.
+  # - maxInstances: Aumenta este valor para permitir que se creen más instancias
+  #   en respuesta a un aumento del tráfico. El valor óptimo dependerá de la carga
+  #   esperada y los recursos de tu aplicación.
+  # - minInstances: (Opcional) Puedes configurarlo a >0 para mantener un número mínimo
+  #   de instancias activas y reducir los tiempos de arranque en frío.
+  # - concurrency: (Opcional) Número de solicitudes simultáneas que una instancia puede manejar.
+  # - cpu: (Opcional) Número de CPUs asignadas a cada instancia (ej. 1, 2, 4).
+  # - memoryMiB: (Opcional) Memoria asignada a cada instancia (ej. 512, 1024).
+  # Consulta la documentación de Firebase App Hosting para más detalles sobre estas opciones
+  # y cómo afectan el rendimiento y el costo.
+  maxInstances: 1
