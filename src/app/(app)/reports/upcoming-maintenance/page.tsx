@@ -101,12 +101,12 @@ export default function UpcomingMaintenanceReportPage() {
     window.print();
   };
 
-  const handleExportExcel = () => {
+  const handleExportCSV = () => {
     if (upcomingVehicles.length === 0) return;
 
     const headers = ["Vehículo (Matrícula)", "Marca y Modelo", "Próx. Mantenimiento (Fecha)", "Próx. Mantenimiento (Km)", "Alerta Por", "Días Restantes", "Km Restantes"];
-    const reportRows = [
-      headers.join('\t'), // Use tab as separator
+    const csvRows = [
+      headers.join(','),
       ...upcomingVehicles.map(v => [
         v.plateNumber,
         `${v.brand} ${v.model}`,
@@ -115,15 +115,15 @@ export default function UpcomingMaintenanceReportPage() {
         v.reason,
         v.daysToNextMaintenance ?? 'N/A',
         v.kmToNextMaintenance?.toLocaleString() ?? 'N/A'
-      ].join('\t'))
+      ].join(','))
     ];
-    const reportString = reportRows.join('\n');
-    const blob = new Blob([reportString], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;' });
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'informe_mantenimiento_proximo.xlsx');
+      link.setAttribute('download', 'informe_mantenimiento_proximo.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -143,8 +143,8 @@ export default function UpcomingMaintenanceReportPage() {
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportExcel} disabled={upcomingVehicles.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (Excel)
+            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={upcomingVehicles.length === 0}>
+              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
             </Button>
           </div>
         }

@@ -9,7 +9,7 @@ import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-// Image component no longer needed
+import Image from "next/image";
 
 interface DetailItemProps {
   icon: React.ElementType;
@@ -47,23 +47,27 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
   const handleStatusChangeAction = async () => {
     "use server";
     if (vehicle.status === "Activo" || vehicle.status === "En Taller") {
+      // If active or in workshop, action is to mark as inactive
       await deleteVehicle(vehicle.id);
     } else if (vehicle.status === "Inactivo") {
+      // If inactive, action is to activate
       await activateVehicle(vehicle.id);
     }
-    redirect(\`/vehicles/\${vehicle.id}\`); 
+    // For "En Taller" to "Activo", it's also activateVehicle
+    // The logic for "En Taller" -> "Activo" is handled by the button text and action choice below.
+    redirect(`/vehicles/${vehicle.id}`); // Redirect to refresh details page
   };
   
   const handleActivateAction = async () => {
     "use server";
     await activateVehicle(vehicle.id);
-    redirect(\`/vehicles/\${vehicle.id}\`);
+    redirect(`/vehicles/${vehicle.id}`);
   }
 
   const handleDeactivateAction = async () => {
     "use server";
-    await deleteVehicle(vehicle.id); 
-    redirect(\`/vehicles/\${vehicle.id}\`);
+    await deleteVehicle(vehicle.id); // deleteVehicle marks as Inactive
+    redirect(`/vehicles/${vehicle.id}`);
   }
 
 
@@ -121,7 +125,16 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
           <CardDescription>Detalles completos del vehículo seleccionado.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Removed Image display block */}
+          <div className="mb-6">
+            <Image
+              src={vehicle.imageUrl || "https://placehold.co/600x400.png"}
+              alt={`${vehicle.brand} ${vehicle.model}`}
+              width={600}
+              height={400}
+              className="rounded-md object-cover mx-auto shadow-md"
+              data-ai-hint="vehicle car"
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
             <DetailItem icon={Tag} label="Matrícula" value={vehicle.plateNumber} />
             <DetailItem icon={Tag} label="VIN" value={vehicle.vin} />
@@ -134,7 +147,7 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
             <DetailItem 
               icon={
                 vehicle.status === "Activo" ? ShieldCheck : 
-                vehicle.status === "En Taller" ? PenToolIcon : 
+                vehicle.status === "En Taller" ? PenToolIcon : // Using PenToolIcon for "En Taller"
                 Trash2 
               } 
               label="Estado" 

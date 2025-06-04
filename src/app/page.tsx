@@ -7,18 +7,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CarFront, Fuel, Wrench, ArrowRight } from "lucide-react";
 import Link from "next/link";
 // Image component is no longer needed here if logo is removed from this page's header
+// import Image from "next/image"; 
 
 export default function LandingPage() {
   const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
-  // companyLogoUrl is no longer needed here
+  // companyLogoUrl is no longer needed here if logo is removed
+  // const companyLogoUrl = process.env.NEXT_PUBLIC_COMPANY_LOGO_URL;
 
   return (
     <div className="flex flex-col min-h-screen">
       <header className="bg-primary text-primary-foreground py-4 px-6 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
-          <Link href="/" className="text-2xl font-bold">
-            {/* Logo completamente eliminado, solo el nombre de la empresa */}
-            {companyName}
+          <Link href="/" className="text-2xl font-bold flex items-center gap-2">
+            {/* Logo removed, only company name remains */}
+            <span>{companyName}</span>
           </Link>
           <nav>
             <Link href="/dashboard">
@@ -102,3 +104,4 @@ export default function LandingPage() {
     </div>
   );
 }
+

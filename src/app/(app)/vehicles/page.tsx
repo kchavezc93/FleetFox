@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,9 +36,9 @@ export default async function VehiclesPage() {
         icon={CarFront}
         actions={
           <>
-            <Button variant="outline" disabled>
+            <Button variant="outline">
               <FileDown className="mr-2 h-4 w-4" />
-              Exportar Excel
+              Exportar CSV
             </Button>
             <Link href="/vehicles/new">
               <Button className="bg-primary hover:bg-primary/90">
@@ -70,6 +71,7 @@ export default async function VehiclesPage() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[80px]">Imagen</TableHead>
                 <TableHead>Matrícula</TableHead>
                 <TableHead>Marca y Modelo</TableHead>
                 <TableHead>Año</TableHead>
@@ -81,6 +83,16 @@ export default async function VehiclesPage() {
             <TableBody>
               {vehicles.map((vehicle) => (
                 <TableRow key={vehicle.id}>
+                  <TableCell>
+                    <Image
+                      src={vehicle.imageUrl || "https://placehold.co/64x64.png"}
+                      alt={`${vehicle.brand} ${vehicle.model}`}
+                      width={64}
+                      height={64}
+                      className="rounded-md object-cover"
+                      data-ai-hint="vehicle car"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{vehicle.plateNumber}</TableCell>
                   <TableCell>{vehicle.brand} {vehicle.model}</TableCell>
                   <TableCell>{vehicle.year}</TableCell>

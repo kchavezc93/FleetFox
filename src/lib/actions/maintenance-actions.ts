@@ -6,7 +6,6 @@ import { maintenanceLogSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { redirect } from 'next/navigation';
 import { getDbClient } from "@/lib/db";
-import { Workbook } from 'exceljs';
 // import sql from 'mssql'; // Descomentar si se instala y usa 'mssql': npm install mssql
 
 // PRODUCCIÓN: Consideraciones Generales para Acciones del Servidor en Producción:
@@ -15,135 +14,6 @@ import { Workbook } from 'exceljs';
 // 3. Validación de Permisos: Verificar si el usuario autenticado tiene los permisos necesarios.
 // 4. Transacciones de Base de Datos: Usar transacciones para operaciones de múltiples escrituras.
 // 5. Pruebas exhaustivas: Pruebas unitarias, de integración y end-to-end.
-
-export async function exportMaintenanceLogsToExcel() {
-  // PRODUCCIÓN: Implementar logging estructurado aquí
-  // PRODUCCIÓN: Implementar validación de permisos aquí
-
-  const dbClient = await getDbClient();
-  if (!dbClient) {
-    console.error("exportMaintenanceLogsToExcel: Configuración de BD no encontrada o conexión fallida. No se pudo exportar.");
-    // PRODUCCIÓN: logger.error({ action: \'exportMaintenanceLogsToExcel\', reason: \'DB client not available\' });
-    return { success: false, message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo exportar." };
-  }
-
-  // PRODUCCIÓN: logger.info({ action: \'exportMaintenanceLogsToExcel\', dbType: dbClient.type }, \"Attempting to fetch maintenance logs for export\");
-
-
-  // --- Lógica para obtener los datos ---
-  // **IMPORTANTE:** Debes tener la implementación real de getMaintenanceLogs funcionando
-  // para el tipo de base de datos que estés usando (SQLServer, etc.)
-  let logs = [];
-  /*
-  // Ejemplo (descomenta e implementa según tu BD real)
-  if (dbClient.type === "SQLServer") {
-      try {
-          const pool = (dbClient as any).pool as sql.ConnectionPool;
-          if (!pool) throw new Error("Pool de SQL Server no disponible.");
-          const request = pool.request();
-           const result = await request.query(\`
-            SELECT
-              ml.id, ml.vehicleId, ml.vehiclePlateNumber, ml.maintenanceType, ml.executionDate, ml.mileageAtService,
-              ml.activitiesPerformed, ml.cost, ml.provider, ml.nextMaintenanceDateScheduled,
-              ml.nextMaintenanceMileageScheduled, ml.createdAt, ml.updatedAt
-            FROM maintenance_logs ml
-            ORDER BY ml.executionDate DESC, ml.createdAt DESC
-          \`);
-          logs = result.recordset.map(row => ({
-              id: row.id.toString(),
-              vehicleId: row.vehicleId,
-              vehiclePlateNumber: row.vehiclePlateNumber,
-              maintenanceType: row.maintenanceType,
-              executionDate: new Date(row.executionDate).toISOString().split('T')[0],
-              mileageAtService: row.mileageAtService,
-              activitiesPerformed: row.activitiesPerformed,
-              cost: parseFloat(row.cost),
-              provider: row.provider,
-              nextMaintenanceDateScheduled: row.nextMaintenanceDateScheduled ? new Date(row.nextMaintenanceDateScheduled).toISOString().split('T')[0] : "",
-              nextMaintenanceMileageScheduled: row.nextMaintenanceMileageScheduled,
-              createdAt: new Date(row.createdAt).toISOString(),
-              // updatedAt: new Date(row.updatedAt).toISOString(),
-          }));
-      } catch (error) {
-          console.error('[SQL Server Error] Error al obtener registros para exportar:', error);
-          // PRODUCCIÓN: logger.error({ action: \'exportMaintenanceLogsToExcel\', error: (error as Error).message }, "Error fetching logs for export");
-          return { success: false, message: `Error al obtener datos para exportar: ${(error as Error).message}` };
-      }
-  } else {
-      console.warn(\`[Export Maintenance Logs] La obtención de registros no está implementada para el tipo de BD: \${dbClient.type}.\`);
-      // PRODUCCIÓN: logger.warn({ action: \'exportMaintenanceLogsToExcel\', dbType: dbClient.type, reason: \'Unsupported DB type for fetch\' });
-       return { success: false, message: \`Exportación no soportada para el tipo de BD: \${dbClient.type}. Favor de implementar la lógica SQL.\` };
-  }
-  */
-
-  // **Temporal: Usar la función existente getMaintenanceLogs si ya la implementaste**
-  // Si ya implementaste getMaintenanceLogs con tu lógica de BD real, puedes usarla directamente:
-   logs = await getMaintenanceLogs(); // Asegúrate de que esta función ya obtenga datos reales
-
-  if (!logs || logs.length === 0) {
-    console.warn("exportMaintenanceLogsToExcel: No se encontraron registros para exportar.");
-    // PRODUCCIÓN: logger.warn({ action: \'exportMaintenanceLogsToExcel\', reason: \'No logs found\' });
-    return { success: false, message: "No hay registros de mantenimiento para exportar." };
-  }
-
-  try {
-    const workbook = new Workbook();
-    const worksheet = workbook.addWorksheet('Registros de Mantenimiento');
-
-    // Define las columnas para el archivo Excel. Ajusta 'key' para que coincida con las propiedades de tu objeto log
-    worksheet.columns = [
-      { header: 'ID Registro', key: 'id', width: 30 },
-      { header: 'Vehículo (Matrícula)', key: 'vehiclePlateNumber', width: 18 },
-      { header: 'Tipo', key: 'maintenanceType', width: 15 },
-      { header: 'Fecha Ejecución', key: 'executionDate', width: 15 }, // Formato YYYY-MM-DD
-      { header: 'Kilometraje', key: 'mileageAtService', width: 15 },
-      { header: 'Actividades Realizadas', key: 'activitiesPerformed', width: 50 },
-      { header: 'Costo (C$)', key: 'cost', width: 12 },
-      { header: 'Proveedor', key: 'provider', width: 20 },
-      { header: 'Próx. Fecha Mantenimiento', key: 'nextMaintenanceDateScheduled', width: 20 }, // Formato YYYY-MM-DD
-      { header: 'Próx. Kilometraje Mantenimiento', key: 'nextMaintenanceMileageScheduled', width: 25 },
-      { header: 'Fecha Creación', key: 'createdAt', width: 20 }, // ISO string
-      // Puedes añadir más columnas si las obtienes de la BD (ej. updatedAt)
-    ];
-
-    // Estilo de encabezados
-    worksheet.getRow(1).font = { bold: true };
-
-    // Añadir los datos
-    logs.forEach(log => {
-      worksheet.addRow({
-        id: log.id,
-        vehiclePlateNumber: log.vehiclePlateNumber,
-        maintenanceType: log.maintenanceType,
-        executionDate: log.executionDate, // Ya debería estar en formato YYYY-MM-DD de la acción get
-        mileageAtService: log.mileageAtService,
-        activitiesPerformed: log.activitiesPerformed,
-        cost: log.cost, // Asegúrate de que sea un número
-        provider: log.provider,
-        nextMaintenanceDateScheduled: log.nextMaintenanceDateScheduled, // Ya debería estar en formato YYYY-MM-DD
-        nextMaintenanceMileageScheduled: log.nextMaintenanceMileageScheduled,
-        createdAt: log.createdAt, // ISO string
-      });
-    });
-
-    // Generar el buffer del archivo Excel
-    const buffer = await workbook.xlsx.writeBuffer();
-
-    // Devuelve el buffer como un Array de números para que sea serializable y manejable en el cliente
-    return {
-      success: true,
-      data: Array.from(buffer), // Convertir Buffer a Array<number>
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      message: "Registros de mantenimiento exportados exitosamente."
-    };
-
-  } catch (error) {
-    console.error("Error durante la creación o escritura del archivo Excel:", error);
-    // PRODUCCIÓN: logger.error({ action: \'exportMaintenanceLogsToExcel\', error: (error as Error).message, stack: (error as Error).stack }, "Error creating/writing Excel file");
-    return { success: false, message: `Error al generar el archivo Excel: ${(error as Error).message}` };
-  }
-}
-
 
 export async function createMaintenanceLog(formData: MaintenanceFormData) {
   const validatedFields = maintenanceLogSchema.safeParse(formData);
@@ -159,10 +29,10 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
   
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error("[Create Maintenance Log Error] Configuración de BD no encontrada o conexión fallida.");
+    console.error("[Create Maintenance Log Error] Configuración de BD no encontrada.");
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo crear el registro. Por favor, revise la página de Configuración y las variables de entorno.", 
-      errors: { form: "Error de conexión a BD." }, 
+      message: "Error: Configuración de base de datos no encontrada. No se pudo crear el registro. Por favor, revise la página de Configuración.", 
+      errors: { form: "Configuración de BD requerida." }, 
       success: false 
     };
   }
@@ -186,8 +56,8 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       await transaction.begin(); 
 
       // Obtener plateNumber del vehículo para denormalización (opcional, pero simplifica listados)
-      let vehiclePlateNumber = "N/A";      
-      const vehicleRequest = transaction.request(); 
+      let vehiclePlateNumber = "N/A";
+      const vehicleRequest = pool.request(transaction); 
       vehicleRequest.input('vehicleIdForMeta', sql.NVarChar(50), data.vehicleId);
       const vehicleResult = await vehicleRequest.query('SELECT plateNumber, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate FROM vehicles WHERE id = @vehicleIdForMeta');
       
@@ -200,7 +70,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       }
       
       // Insertar el registro de mantenimiento principal
-      const logRequest = transaction.request();
+      const logRequest = pool.request(transaction);
       logRequest.input('ml_vehicleId', sql.NVarChar(50), data.vehicleId);
       logRequest.input('ml_vehiclePlateNumber', sql.NVarChar(50), vehiclePlateNumber); 
       logRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
@@ -242,7 +112,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           // El 'content' viene como Data URI (ej. "data:image/png;base64,iVBORw0KGgo...")
           // Necesitamos extraer la parte Base64 pura.
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
-
+          
           const attachmentRequest = pool.request(transaction);
           attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), newLogId); // Usar newLogId
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
@@ -258,7 +128,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       }
 
       // Actualizar el vehículo con el nuevo kilometraje y las próximas fechas/kilometrajes de mantenimiento
-      const vehicleDataFromDb = vehicleResult.recordset[0];      
+      const vehicleDataFromDb = vehicleResult.recordset[0];
       const updateVehicleRequest = pool.request(transaction);
       updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), data.vehicleId);
       // Solo actualizar currentMileage si el kilometraje del servicio es mayor
@@ -371,10 +241,10 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
 
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error(`[Update Maintenance Log Error] ID: ${id}. Configuración de BD no encontrada o conexión fallida.`);
+    console.error(`[Update Maintenance Log Error] ID: ${id}. Configuración de BD no encontrada.`);
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo actualizar. Por favor, revise la página de Configuración y las variables de entorno.", 
-      errors: { form: "Error de conexión a BD." }, 
+      message: "Error: Configuración de base de datos no encontrada. No se pudo actualizar. Por favor, revise la página de Configuración.", 
+      errors: { form: "Configuración de BD requerida." }, 
       success: false 
     };
   }
@@ -398,7 +268,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       await transaction.begin();
 
       // Obtener el vehicleId del log existente para actualizar el vehículo después
-      const getLogRequest = transaction.request();
+      const getLogRequest = pool.request(transaction);
       getLogRequest.input('logIdForVehicleInfo', sql.NVarChar(50), id);
       const logInfoResult = await getLogRequest.query('SELECT vehicleId, vehiclePlateNumber FROM maintenance_logs WHERE id = @logIdForVehicleInfo');
       if (logInfoResult.recordset.length === 0) {
@@ -410,7 +280,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       const existingLogPlateNumber = logInfoResult.recordset[0].vehiclePlateNumber;
 
       // Actualizar el registro de mantenimiento principal
-      const logUpdateRequest = transaction.request();
+      const logUpdateRequest = pool.request(transaction);
       logUpdateRequest.input('ml_id', sql.NVarChar(50), id);
       logUpdateRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
       logUpdateRequest.input('ml_executionDate', sql.Date, data.executionDate);
@@ -447,7 +317,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       // Manejar adjuntos: eliminar los marcados y agregar los nuevos
       if (data.attachmentsToRemove && data.attachmentsToRemove.length > 0) {
         for (const attachmentIdToRemove of data.attachmentsToRemove) {
-          const deleteAttachmentRequest = transaction.request();
+          const deleteAttachmentRequest = pool.request(transaction);
           deleteAttachmentRequest.input('ad_id_to_remove', sql.NVarChar(50), attachmentIdToRemove);
           deleteAttachmentRequest.input('ad_log_id_check', sql.NVarChar(50), id); // Asegurar que el adjunto pertenece al log
           await deleteAttachmentRequest.query('DELETE FROM attached_documents WHERE id = @ad_id_to_remove AND maintenance_log_id = @ad_log_id_check;');
@@ -457,7 +327,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       if (data.newAttachments && data.newAttachments.length > 0) {
         for (const attachment of data.newAttachments) {
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
-          const attachmentRequest = transaction.request();
+          const attachmentRequest = pool.request(transaction);
           attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), id); // Usar el ID del log que se está actualizando
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
           attachmentRequest.input('ad_file_type', sql.NVarChar(100), attachment.type);
@@ -471,7 +341,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       }
 
       // Actualizar el vehículo (asegurándose de tener el vehicleId correcto)
-      const vehicleOriginalDataRequest = transaction.request();
+      const vehicleOriginalDataRequest = pool.request(transaction);
       vehicleOriginalDataRequest.input('v_id_for_update', sql.NVarChar(50), existingLogVehicleId);
       const vehicleOriginalDataResult = await vehicleOriginalDataRequest.query('SELECT currentMileage FROM vehicles WHERE id = @v_id_for_update');
       if (vehicleOriginalDataResult.recordset.length === 0) {
@@ -481,7 +351,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       }
       const originalVehicleMileage = vehicleOriginalDataResult.recordset[0].currentMileage;
 
-      const updateVehicleRequest = transaction.request();
+      const updateVehicleRequest = pool.request(transaction);
       updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), existingLogVehicleId);
       const newCurrentMileageForVehicle = Math.max(data.mileageAtService, originalVehicleMileage);
       updateVehicleRequest.input('upd_v_currentMileage', sql.Int, newCurrentMileageForVehicle); 
@@ -581,9 +451,9 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
 export async function deleteMaintenanceLog(id: string) {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error(`deleteMaintenanceLog(${id}): Error de configuración de BD o conexión fallida. No se pudo eliminar.`);
-    // PRODUCCIÓN: logger.error({ action: 'deleteMaintenanceLog', logId: id, reason: 'DB client not available' });
-    throw new Error("Cliente de base de datos no disponible o conexión fallida. No se pudo eliminar el registro.");
+    console.error(`deleteMaintenanceLog(${id}): Error de configuración de BD. No se pudo eliminar.`);
+    // PRODUCCIÓN: logger.error({ action: 'deleteMaintenanceLog', logId: id, reason: 'DB config not found' });
+    throw new Error("Configuración de base de datos no encontrada. No se pudo eliminar el registro.");
   }
   
   // PRODUCCIÓN: logger.info({ action: 'deleteMaintenanceLog', dbType: dbClient.type, logId: id }, "Attempting to delete maintenance log and its attachments");
@@ -607,14 +477,12 @@ export async function deleteMaintenanceLog(id: string) {
       
       // Primero eliminar adjuntos asociados de la tabla 'attached_documents'
       const deleteAttachmentsRequest = pool.request(transaction);
-      const deleteAttachmentsRequest = transaction.request();
       deleteAttachmentsRequest.input('logIdToDeleteAttachments', sql.NVarChar(50), id);
       await deleteAttachmentsRequest.query('DELETE FROM attached_documents WHERE maintenance_log_id = @logIdToDeleteAttachments;');
       // PRODUCCIÓN: logger.info({ action: 'deleteMaintenanceLog', logId: id, subAction: 'attachmentsDeleted' });
 
       // Luego eliminar el registro de mantenimiento principal de 'maintenance_logs'
       const deleteLogRequest = pool.request(transaction);
-      const deleteLogRequest = transaction.request();
       deleteLogRequest.input('logIdToDelete', sql.NVarChar(50), id);
       const result = await deleteLogRequest.query('DELETE FROM maintenance_logs WHERE id = @logIdToDelete;');
       
@@ -657,7 +525,7 @@ export async function deleteMaintenanceLog(id: string) {
 export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn("getMaintenanceLogs: Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.");
+    console.warn("getMaintenanceLogs: Configuración de BD no encontrada. Devolviendo lista vacía.");
     return [];
   }
   
@@ -724,7 +592,7 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
 export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog | null> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn(`getMaintenanceLogById(${id}): Configuración de BD no encontrada o conexión fallida. Devolviendo null.`);
+    console.warn(`getMaintenanceLogById(${id}): Configuración de BD no encontrada. Devolviendo null.`);
     return null;
   }
   
@@ -824,7 +692,7 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
 export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<MaintenanceLog[]> {
     const dbClient = await getDbClient();
     if (!dbClient) {
-        console.warn(`getMaintenanceLogsByVehicleId(${vehicleId}): Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.`);
+        console.warn(`getMaintenanceLogsByVehicleId(${vehicleId}): Configuración de BD no encontrada. Devolviendo lista vacía.`);
         return [];
     }
     
@@ -884,3 +752,4 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
     console.log(`[Get Maintenance Logs By Vehicle ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${vehicleId}. Devolviendo lista vacía.`);
     return [];
 }
+

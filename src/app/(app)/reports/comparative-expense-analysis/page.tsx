@@ -177,61 +177,61 @@ export default function ComparativeExpenseAnalysisPage() {
 
   const handlePrint = () => window.print();
 
-  const handleExportExcel = () => {
+  const handleExportCSV = () => {
     if (comparativeData.vehicleBreakdown.length === 0 && selectedVehicleId === "all") return;
     if (selectedVehicleId !== "all" && !comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleId)) return;
     
-    let reportRows: string[] = [];
+    let csvRows: string[] = [];
     const headers = ["Métrica", "Valor"];
     
     // General Summary
-    reportRows.push("Resumen General");
-    reportRows.push(headers.join('\t')); // Use tab as separator for better Excel import
-    reportRows.push(`Costo Total Mantenimiento (C$)\tC$${comparativeData.totalMaintenanceCost.toFixed(2)}`);
-    reportRows.push(`Costo Total Combustible (C$)\tC$${comparativeData.totalFuelingCost.toFixed(2)}`);
-    reportRows.push(`Costo Total General (C$)\tC$${comparativeData.totalOverallCost.toFixed(2)}`);
-    reportRows.push(`Galones Totales Consumidos\t${comparativeData.totalGallonsConsumed.toFixed(2)}`);
-    reportRows.push(`Kilómetros Recorridos\t${comparativeData.kmDrivenInPeriod?.toLocaleString() ?? 'N/A'}`);
-    reportRows.push(`Costo por Km (C$)\t${comparativeData.costPerKm ? 'C$' + comparativeData.costPerKm.toFixed(2) : 'N/A'}`);
-    reportRows.push(`Eficiencia Prom. (km/gal)\t${comparativeData.avgFuelEfficiency ? comparativeData.avgFuelEfficiency.toFixed(1) : 'N/A'}`);
-    reportRows.push(`Num. Registros Mantenimiento\t${comparativeData.maintenanceLogCount}`);
-    reportRows.push(`Num. Registros Combustible\t${comparativeData.fuelingLogCount}`);
-    reportRows.push(""); // Spacer
+    csvRows.push("Resumen General");
+    csvRows.push(headers.join(','));
+    csvRows.push(`Costo Total Mantenimiento (C$),C$${comparativeData.totalMaintenanceCost.toFixed(2)}`);
+    csvRows.push(`Costo Total Combustible (C$),C$${comparativeData.totalFuelingCost.toFixed(2)}`);
+    csvRows.push(`Costo Total General (C$),C$${comparativeData.totalOverallCost.toFixed(2)}`);
+    csvRows.push(`Galones Totales Consumidos,${comparativeData.totalGallonsConsumed.toFixed(2)}`);
+    csvRows.push(`Kilómetros Recorridos,${comparativeData.kmDrivenInPeriod?.toLocaleString() ?? 'N/A'}`);
+    csvRows.push(`Costo por Km (C$),${comparativeData.costPerKm ? 'C$' + comparativeData.costPerKm.toFixed(2) : 'N/A'}`);
+    csvRows.push(`Eficiencia Prom. (km/gal),${comparativeData.avgFuelEfficiency ? comparativeData.avgFuelEfficiency.toFixed(1) : 'N/A'}`);
+    csvRows.push(`Num. Registros Mantenimiento,${comparativeData.maintenanceLogCount}`);
+    csvRows.push(`Num. Registros Combustible,${comparativeData.fuelingLogCount}`);
+    csvRows.push(""); // Spacer
 
     // Vehicle Breakdown (if 'all' or specific vehicle has data)
     if (selectedVehicleId === "all" && comparativeData.vehicleBreakdown.length > 0) {
-      reportRows.push("Desglose por Vehículo");
+      csvRows.push("Desglose por Vehículo");
       const vehicleHeaders = ["Matrícula", "Marca y Modelo", "Costo Mantenimiento (C$)", "Costo Combustible (C$)", "Costo Total (C$)", "Km Recorridos"];
-      reportRows.push(vehicleHeaders.join('\t'));
+      csvRows.push(vehicleHeaders.join(','));
       comparativeData.vehicleBreakdown.forEach(v => {
-        reportRows.push([
+        csvRows.push([
           v.plateNumber,
           v.brandModel,
           `C$${v.maintenanceCost.toFixed(2)}`,
           `C$${v.fuelingCost.toFixed(2)}`,
           `C$${v.totalCost.toFixed(2)}`,
           v.kmDriven?.toLocaleString() ?? 'N/A'
-        ].join('\t'));
+        ].join(','));
       });
     } else if (selectedVehicleId !== "all") {
         const vehicleData = comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleId);
         if (vehicleData) {
-            reportRows.push(`Detalle Vehículo: ${vehicleData.plateNumber}`);
-            reportRows.push(["Métrica", "Valor"].join('\t'));
-            reportRows.push(`Costo Mantenimiento (C$)\tC$${vehicleData.maintenanceCost.toFixed(2)}`);
-            reportRows.push(`Costo Combustible (C$)\tC$${vehicleData.fuelingCost.toFixed(2)}`);
-            reportRows.push(`Costo Total (C$)\tC$${vehicleData.totalCost.toFixed(2)}`);
-            reportRows.push(`Km Recorridos\t${vehicleData.kmDriven?.toLocaleString() ?? 'N/A'}`);
+            csvRows.push(`Detalle Vehículo: ${vehicleData.plateNumber}`);
+            csvRows.push(["Métrica", "Valor"].join(','));
+            csvRows.push(`Costo Mantenimiento (C$),C$${vehicleData.maintenanceCost.toFixed(2)}`);
+            csvRows.push(`Costo Combustible (C$),C$${vehicleData.fuelingCost.toFixed(2)}`);
+            csvRows.push(`Costo Total (C$),C$${vehicleData.totalCost.toFixed(2)}`);
+            csvRows.push(`Km Recorridos,${vehicleData.kmDriven?.toLocaleString() ?? 'N/A'}`);
         }
     }
 
-    const reportString = reportRows.join('\n');
-    const blob = new Blob([reportString], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;' });
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'informe_comparativo_gastos.xlsx');
+      link.setAttribute('download', 'informe_comparativo_gastos.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -252,8 +252,8 @@ export default function ComparativeExpenseAnalysisPage() {
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportExcel} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (Excel)
+            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
+              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
             </Button>
           </div>
         }
@@ -432,3 +432,4 @@ export default function ComparativeExpenseAnalysisPage() {
     </>
   );
 }
+

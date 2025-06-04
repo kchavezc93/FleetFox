@@ -93,12 +93,12 @@ export default function FuelEfficiencyAnalysisPage() {
     window.print();
   };
 
-  const handleExportExcel = () => {
+  const handleExportCSV = () => {
     if (efficiencyData.length === 0) return;
 
     const headers = ["Vehículo (Matrícula)", "Marca y Modelo", "Eficiencia Prom. (km/gal)", "Eficiencia Mín. (km/gal)", "Eficiencia Máx. (km/gal)", "Núm. Registros"];
-    const reportRows = [
-      headers.join('\t'), // Use tab as separator
+    const csvRows = [
+      headers.join(','),
       ...efficiencyData.map(d => [
         d.plateNumber,
         d.brandModel,
@@ -106,15 +106,15 @@ export default function FuelEfficiencyAnalysisPage() {
         d.minEfficiency?.toFixed(1) ?? 'N/A',
         d.maxEfficiency?.toFixed(1) ?? 'N/A',
         d.logCount
-      ].join('\t'))
+      ].join(','))
     ];
-    const reportString = reportRows.join('\n');
-    const blob = new Blob([reportString], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=utf-8;' });
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'informe_analisis_eficiencia.xlsx');
+      link.setAttribute('download', 'informe_analisis_eficiencia.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -140,8 +140,8 @@ export default function FuelEfficiencyAnalysisPage() {
              <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportExcel} disabled={efficiencyData.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (Excel)
+            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={efficiencyData.length === 0}>
+              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
             </Button>
           </div>
         }

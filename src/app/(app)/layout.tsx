@@ -11,8 +11,7 @@ import {
   SidebarFooter as UISidebarFooter,
 } from "@/components/ui/sidebar";
 import Link from "next/link";
-// Image import no longer needed here
-// import Image from "next/image"; 
+import Image from "next/image"; 
 
 // PRODUCCIÓN: Consideraciones de Seguridad para el Layout de la Aplicación
 // 1. Protección de Rutas:
@@ -42,19 +41,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   //   redirect('/login'); // Si no hay sesión, redirigir a login
   // }
   const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
-  // companyLogoUrl is no longer used.
+  const companyLogoUrl = process.env.NEXT_PUBLIC_COMPANY_LOGO_URL;
 
   return (
     <SidebarProvider defaultOpen>
       <Sidebar collapsible="icon" variant="sidebar" className="border-r">
         <UISidebarHeader className="p-4">
-          <Link href="/dashboard" className="flex items-center text-lg font-semibold text-primary">
-            {/* Logo completamente eliminado. Solo el nombre de la empresa. */}
+          <Link href="/dashboard" className="flex items-center gap-2 text-lg font-semibold text-primary">
+            {companyLogoUrl ? (
+              <Image
+                src={companyLogoUrl}
+                alt={`Logo de ${companyName}`}
+                width={28} 
+                height={28}
+                className="object-contain" 
+                data-ai-hint="company logo"
+              />
+            ) : (
+              <svg 
+                width="28" 
+                height="28" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className="text-primary"
+                aria-label="Logo genérico"
+              >
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            )}
             <span className="group-data-[collapsible=icon]:hidden">{companyName}</span>
-            {/* Si el span anterior causa problemas de colapso, se puede simplificar a solo: */}
-            {/* <span className={cn(open ? "" : "hidden")}>{companyName}</span> */}
-            {/* O incluso más simple si el colapso se maneja solo con el grupo: */}
-            {/* {companyName} */} 
           </Link>
         </UISidebarHeader>
         <SidebarContent className="p-0">

@@ -13,6 +13,7 @@ export interface Vehicle {
   status: "Activo" | "En Taller" | "Inactivo";
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
+  imageUrl?: string;
 }
 
 export interface AttachedDocument {
@@ -80,7 +81,7 @@ export interface Alert {
 }
 
 // FormData types
-export type VehicleFormData = Omit<Vehicle, "id" | "createdAt" | "updatedAt" | "nextPreventiveMaintenanceDate"> & {
+export type VehicleFormData = Omit<Vehicle, "id" | "createdAt" | "updatedAt" | "imageUrl" | "nextPreventiveMaintenanceDate"> & {
   nextPreventiveMaintenanceDate: Date;
 };
 

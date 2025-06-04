@@ -23,10 +23,10 @@ export async function createFuelingLog(formData: FuelingFormData) {
 
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error("[Create Fueling Log Error] Configuración de BD no encontrada o conexión fallida.");
+    console.error("[Create Fueling Log Error] Configuración de BD no encontrada.");
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo crear el registro. Por favor, revise la página de Configuración y las variables de entorno.", 
-      errors: { form: "Error de conexión a BD." }, 
+      message: "Error: Configuración de base de datos no encontrada. No se pudo crear el registro. Por favor, revise la página de Configuración.", 
+      errors: { form: "Configuración de BD requerida." }, 
       success: false 
     };
   }
@@ -169,7 +169,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
 export async function getFuelingLogs(): Promise<FuelingLog[]> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn("getFuelingLogs: Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.");
+    console.warn("getFuelingLogs: Configuración de BD no encontrada. Devolviendo lista vacía.");
     return [];
   }
   // PRODUCCIÓN: logger.info({ action: 'getFuelingLogs', dbType: dbClient.type }, "Attempting to fetch all fueling logs");
@@ -224,7 +224,7 @@ export async function getFuelingLogs(): Promise<FuelingLog[]> {
 export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<FuelingLog[]> {
     const dbClient = await getDbClient();
     if (!dbClient) {
-        console.warn(`getFuelingLogsByVehicleId(${vehicleId}): Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.`);
+        console.warn(`getFuelingLogsByVehicleId(${vehicleId}): Configuración de BD no encontrada. Devolviendo lista vacía.`);
         return [];
     }
     // PRODUCCIÓN: logger.info({ action: 'getFuelingLogsByVehicleId', dbType: dbClient.type, vehicleId }, "Attempting to fetch fueling logs for vehicle");

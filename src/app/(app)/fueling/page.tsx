@@ -35,7 +35,7 @@ export default async function FuelingPage() {
           <>
             <Button variant="outline">
               <FileDown className="mr-2 h-4 w-4" />
-              Exportar Excel
+              Exportar CSV
             </Button>
             <Link href="/fueling/new">
               <Button className="bg-primary hover:bg-primary/90">

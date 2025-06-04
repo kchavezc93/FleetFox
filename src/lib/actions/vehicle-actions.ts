@@ -30,11 +30,11 @@ export async function createVehicle(formData: VehicleFormData) {
 
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error("[Create Vehicle Error] Configuración de BD no encontrada o conexión fallida.");
-    // PRODUCCIÓN: logger.error({ action: 'createVehicle', reason: 'DB client not available' });
+    console.error("[Create Vehicle Error] Configuración de BD no encontrada.");
+    // PRODUCCIÓN: logger.error({ action: 'createVehicle', reason: 'DB config not found' });
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo crear el vehículo. Por favor, revise la página de Configuración y las variables de entorno.", 
-      errors: { form: "Error de conexión a BD." },
+      message: "Error: Configuración de base de datos no encontrada o inválida. No se pudo crear el vehículo. Por favor, revise la página de Configuración.", 
+      errors: { form: "Configuración de BD requerida." },
       success: false,
     };
   }
@@ -53,11 +53,15 @@ export async function createVehicle(formData: VehicleFormData) {
     
     try {
       const request = pool.request();
+      // Se genera una URL de imagen de marcador de posición. En producción, esto podría ser null
+      // o gestionarse a través de un sistema de subida de archivos.
+      const imageUrl = `https://placehold.co/600x400.png?text=${encodeURIComponent(data.brand + ' ' + data.model)}`;
       
       // Verificar si ya existe un vehículo con la misma matrícula o VIN para evitar duplicados.
+      // Esto debe hacerse ANTES de intentar la inserción.
       request.input('checkPlateNumber', sql.NVarChar(50), data.plateNumber);
       request.input('checkVin', sql.NVarChar(50), data.vin);
-      const checkResult = await request.query('SELECT id, plateNumber, vin FROM vehicles WHERE plateNumber = @checkPlateNumber OR vin = @checkVin');
+      const checkResult = await request.query('SELECT id FROM vehicles WHERE plateNumber = @checkPlateNumber OR vin = @checkVin');
 
       if (checkResult.recordset.length > 0) {
         const errors: Record<string, string> = {};
@@ -71,6 +75,7 @@ export async function createVehicle(formData: VehicleFormData) {
         return { success: false, message: "La matrícula o VIN ya existen.", errors };
       }
       
+      // Limpiar inputs para la inserción o usar una nueva request
       const insertRequest = pool.request(); 
       insertRequest.input('plateNumber_ins', sql.NVarChar(50), data.plateNumber);
       insertRequest.input('vin_ins', sql.NVarChar(50), data.vin);
@@ -82,18 +87,19 @@ export async function createVehicle(formData: VehicleFormData) {
       insertRequest.input('nextPreventiveMaintenanceMileage_ins', sql.Int, data.nextPreventiveMaintenanceMileage);
       insertRequest.input('nextPreventiveMaintenanceDate_ins', sql.Date, data.nextPreventiveMaintenanceDate);
       insertRequest.input('status_ins', sql.NVarChar(50), data.status);
+      insertRequest.input('imageUrl_ins', sql.NVarChar(255), imageUrl);
       // createdAt y updatedAt se manejan con GETDATE() en la consulta SQL.
       const result = await insertRequest.query(\`
         INSERT INTO vehicles (
           plateNumber, vin, brand, model, year, fuelType, currentMileage, 
           nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, 
-          createdAt, updatedAt
+          createdAt, updatedAt, imageUrl
         )
-        OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt
+        OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl 
         VALUES (
           @plateNumber_ins, @vin_ins, @brand_ins, @model_ins, @year_ins, @fuelType_ins, @currentMileage_ins, 
           @nextPreventiveMaintenanceMileage_ins, @nextPreventiveMaintenanceDate_ins, @status_ins, 
-          GETDATE(), GETDATE()
+          GETDATE(), GETDATE(), @imageUrl_ins
         );
       \`);
       
@@ -105,13 +111,14 @@ export async function createVehicle(formData: VehicleFormData) {
       const newVehicle: Vehicle = { 
         id: newDbRecord.id.toString(), 
         ...data, 
-        nextPreventiveMaintenanceDate: data.nextPreventiveMaintenanceDate.toISOString().split('T')[0],
+        nextPreventiveMaintenanceDate: data.nextPreventiveMaintenanceDate.toISOString().split('T')[0], // Asegurar formato YYYY-MM-DD
         createdAt: new Date(newDbRecord.createdAt).toISOString(), 
-        updatedAt: new Date(newDbRecord.updatedAt).toISOString()
+        updatedAt: new Date(newDbRecord.updatedAt).toISOString(), 
+        imageUrl: newDbRecord.imageUrl 
       };
       
       // PRODUCCIÓN: logger.info({ action: 'createVehicle', vehicleId: newVehicle.id, plateNumber: newVehicle.plateNumber }, "Vehicle created successfully");
-      revalidatePath("/vehicles");
+      revalidatePath("/vehicles"); // Revalida el caché de la página de lista de vehículos.
       return { message: \`Vehículo \${newVehicle.plateNumber} creado exitosamente.\`, vehicle: newVehicle, success: true };
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'createVehicle', data, error: (error as Error).message, stack: (error as Error).stack }, "Error creating vehicle in SQL Server");
@@ -126,7 +133,7 @@ export async function createVehicle(formData: VehicleFormData) {
     // PRODUCCIÓN: logger.warn({ action: 'createVehicle', dbType: dbClient.type, reason: 'DB type not implemented' });
     console.warn(\`[Create Vehicle] La creación de vehículos no está implementada para el tipo de BD: \${dbClient.type}. Por favor, implemente la lógica SQL.\`);
     return { 
-      message: \`Creación de vehículo (\${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
+      message: \`Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
       vehicle: null,
       success: false,
       errors: { form: \`Implementación SQL pendiente para \${dbClient.type}.\` },
@@ -134,6 +141,7 @@ export async function createVehicle(formData: VehicleFormData) {
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Create Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo no creado.`);
   return { 
     message: `Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
@@ -157,11 +165,11 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
   
   const dbClient = await getDbClient();
   if (!dbClient) {
-     console.error(`[Update Vehicle Error] ID: ${id}. Configuración de BD no encontrada o conexión fallida.`);
-     // PRODUCCIÓN: logger.error({ action: 'updateVehicle', vehicleId: id, reason: 'DB client not available' });
+     console.error(`[Update Vehicle Error] ID: ${id}. Configuración de BD no encontrada.`);
+     // PRODUCCIÓN: logger.error({ action: 'updateVehicle', vehicleId: id, reason: 'DB config not found' });
      return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo actualizar el vehículo. Por favor, revise la página de Configuración y las variables de entorno.", 
-      errors: { form: "Error de conexión a BD." },
+      message: "Error: Configuración de base de datos no encontrada o inválida. No se pudo actualizar el vehículo. Por favor, revise la página de Configuración.", 
+      errors: { form: "Configuración de BD requerida." },
       success: false,
     };
   }
@@ -181,10 +189,11 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
     try {
       const request = pool.request();
       
+      // Verificar si ya existe OTRO vehículo con la misma matrícula o VIN
       request.input('currentId_chk', sql.NVarChar(50), id);
       request.input('checkPlateNumber_upd', sql.NVarChar(50), data.plateNumber);
       request.input('checkVin_upd', sql.NVarChar(50), data.vin);
-      const checkResult = await request.query('SELECT id, plateNumber, vin FROM vehicles WHERE (plateNumber = @checkPlateNumber_upd OR vin = @checkVin_upd) AND id <> @currentId_chk');
+      const checkResult = await request.query('SELECT id FROM vehicles WHERE (plateNumber = @checkPlateNumber_upd OR vin = @checkVin_upd) AND id <> @currentId_chk');
 
       if (checkResult.recordset.length > 0) {
         const errors: Record<string, string> = {};
@@ -210,7 +219,8 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
       updateRequest.input('nextPreventiveMaintenanceMileage_upd_val', sql.Int, data.nextPreventiveMaintenanceMileage);
       updateRequest.input('nextPreventiveMaintenanceDate_upd_val', sql.Date, data.nextPreventiveMaintenanceDate);
       updateRequest.input('status_upd_val', sql.NVarChar(50), data.status);
-      
+      // No actualizamos imageUrl aquí a menos que se provea un mecanismo para cambiarla.
+      // updatedAt se maneja con GETDATE() en la consulta SQL.
       const result = await updateRequest.query(\`
         UPDATE vehicles 
         SET 
@@ -225,7 +235,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
           nextPreventiveMaintenanceDate = @nextPreventiveMaintenanceDate_upd_val, 
           status = @status_upd_val, 
           updatedAt = GETDATE()
-        OUTPUT INSERTED.id, INSERTED.plateNumber, INSERTED.vin, INSERTED.brand, INSERTED.model, INSERTED.year, INSERTED.fuelType, INSERTED.currentMileage, INSERTED.nextPreventiveMaintenanceMileage, INSERTED.nextPreventiveMaintenanceDate, INSERTED.status, INSERTED.createdAt, INSERTED.updatedAt
+        OUTPUT INSERTED.id, INSERTED.plateNumber, INSERTED.vin, INSERTED.brand, INSERTED.model, INSERTED.year, INSERTED.fuelType, INSERTED.currentMileage, INSERTED.nextPreventiveMaintenanceMileage, INSERTED.nextPreventiveMaintenanceDate, INSERTED.status, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
         WHERE id = @id_upd;
       \`);
 
@@ -244,10 +254,11 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
         fuelType: updatedDbRecord.fuelType,
         currentMileage: updatedDbRecord.currentMileage,
         nextPreventiveMaintenanceMileage: updatedDbRecord.nextPreventiveMaintenanceMileage,
-        nextPreventiveMaintenanceDate: new Date(updatedDbRecord.nextPreventiveMaintenanceDate).toISOString().split('T')[0],
+        nextPreventiveMaintenanceDate: new Date(updatedDbRecord.nextPreventiveMaintenanceDate).toISOString().split('T')[0], // Asegurar formato YYYY-MM-DD
         status: updatedDbRecord.status,
         createdAt: new Date(updatedDbRecord.createdAt).toISOString(), 
-        updatedAt: new Date(updatedDbRecord.updatedAt).toISOString()
+        updatedAt: new Date(updatedDbRecord.updatedAt).toISOString(),
+        imageUrl: updatedDbRecord.imageUrl 
       };
       
       // PRODUCCIÓN: logger.info({ action: 'updateVehicle', vehicleId: id }, "Vehicle updated successfully");
@@ -275,6 +286,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Update Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no actualizado.`);
   return { 
     message: `Actualización de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}.`, 
@@ -287,10 +299,10 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
 export async function deleteVehicle(id: string) { // This action marks as inactive
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error(`[Delete Vehicle Error] ID: ${id}. Configuración de BD no encontrada o conexión fallida.`);
-    // PRODUCCIÓN: logger.error({ action: 'deleteVehicle', vehicleId: id, reason: 'DB client not available' });
+    console.error(`[Delete Vehicle Error] ID: ${id}. Configuración de BD no encontrada.`);
+    // PRODUCCIÓN: logger.error({ action: 'deleteVehicle', vehicleId: id, reason: 'DB config not found' });
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo marcar como inactivo el vehículo.", 
+      message: "Error: Configuración de base de datos no encontrada. No se pudo marcar como inactivo el vehículo.", 
       success: false 
     };
   }
@@ -308,6 +320,7 @@ export async function deleteVehicle(id: string) { // This action marks as inacti
     try {
       const request = pool.request();
       request.input('id_del', sql.NVarChar(50), id);
+      // Esta es una "soft delete", solo cambia el estado.
       const result = await request.query(\`UPDATE vehicles SET status = 'Inactivo', updatedAt = GETDATE() WHERE id = @id_del;\`);
       
       if (result.rowsAffected[0] === 0) {
@@ -333,22 +346,23 @@ export async function deleteVehicle(id: string) { // This action marks as inacti
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Delete Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no marcado como inactivo.`);
   revalidatePath("/vehicles");
   revalidatePath(`/vehicles/${id}`);
   return { 
     message: `Marcar vehículo ID ${id} como inactivo pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
-    success: true 
+    success: true // Simular éxito para que la UI se actualice
   };
 }
 
 export async function activateVehicle(id: string) {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.error(`[Activate Vehicle Error] ID: ${id}. Configuración de BD no encontrada o conexión fallida.`);
-    // PRODUCCIÓN: logger.error({ action: 'activateVehicle', vehicleId: id, reason: 'DB client not available' });
+    console.error(`[Activate Vehicle Error] ID: ${id}. Configuración de BD no encontrada.`);
+    // PRODUCCIÓN: logger.error({ action: 'activateVehicle', vehicleId: id, reason: 'DB config not found' });
     return { 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo activar el vehículo.", 
+      message: "Error: Configuración de base de datos no encontrada. No se pudo activar el vehículo.", 
       success: false 
     };
   }
@@ -391,20 +405,21 @@ export async function activateVehicle(id: string) {
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Activate Vehicle] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id} no activado.`);
   revalidatePath("/vehicles");
   revalidatePath(`/vehicles/${id}`);
   return { 
     message: `Activación de vehículo ID ${id} pendiente de implementación SQL para ${dbClient.type}. (Simulado, revalidando rutas)`, 
-    success: true 
+    success: true // Simular éxito para que la UI se actualice
   };
 }
 
 export async function getVehicles(): Promise<Vehicle[]> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn("getVehicles: Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.");
-    // PRODUCCIÓN: logger.error({ action: 'getVehicles', reason: 'DB client not available' });
+    console.warn("getVehicles: Configuración de BD no encontrada. Devolviendo lista vacía.");
+    // PRODUCCIÓN: logger.error({ action: 'getVehicles', reason: 'DB config not found' });
     return [];
   }
   // PRODUCCIÓN: logger.info({ action: 'getVehicles', dbType: dbClient.type }, "Attempting to fetch all vehicles");
@@ -420,7 +435,9 @@ export async function getVehicles(): Promise<Vehicle[]> {
     }
     try {
       const request = pool.request();
-      const result = await request.query("SELECT id, plateNumber, vin, brand, model, year, fuelType, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, createdAt, updatedAt FROM vehicles ORDER BY createdAt DESC");
+      // PRODUCCIÓN: Considerar paginación para grandes cantidades de datos.
+      // SELECT * FROM vehicles ORDER BY createdAt DESC OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY;
+      const result = await request.query("SELECT id, plateNumber, vin, brand, model, year, fuelType, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, createdAt, updatedAt, imageUrl FROM vehicles ORDER BY createdAt DESC");
       
       return result.recordset.map(row => ({ 
         id: row.id.toString(),
@@ -432,15 +449,16 @@ export async function getVehicles(): Promise<Vehicle[]> {
         fuelType: row.fuelType,
         currentMileage: row.currentMileage,
         nextPreventiveMaintenanceMileage: row.nextPreventiveMaintenanceMileage,
-        nextPreventiveMaintenanceDate: row.nextPreventiveMaintenanceDate ? new Date(row.nextPreventiveMaintenanceDate).toISOString().split('T')[0] : "", 
+        nextPreventiveMaintenanceDate: row.nextPreventiveMaintenanceDate ? new Date(row.nextPreventiveMaintenanceDate).toISOString().split('T')[0] : "", // Asegurar formato YYYY-MM-DD
         status: row.status,
         createdAt: new Date(row.createdAt).toISOString(),
-        updatedAt: new Date(row.updatedAt).toISOString()
+        updatedAt: new Date(row.updatedAt).toISOString(),
+        imageUrl: row.imageUrl
       })) as Vehicle[];
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getVehicles', error: (error as Error).message, stack: (error as Error).stack }, "Error fetching vehicles from SQL Server");
       console.error(\`[SQL Server Error] Error al obtener vehículos:\`, error);
-      return [];
+      return []; // Devolver vacío en caso de error para no romper la UI
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'getVehicles', dbType: dbClient.type, reason: 'DB type not implemented' });
@@ -449,6 +467,7 @@ export async function getVehicles(): Promise<Vehicle[]> {
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Get Vehicles] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
   return [];
 }
@@ -456,8 +475,8 @@ export async function getVehicles(): Promise<Vehicle[]> {
 export async function getVehicleById(id: string): Promise<Vehicle | null> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn(`getVehicleById(${id}): Configuración de BD no encontrada o conexión fallida. Devolviendo null.`);
-    // PRODUCCIÓN: logger.error({ action: 'getVehicleById', vehicleId: id, reason: 'DB client not available' });
+    console.warn(`getVehicleById(${id}): Configuración de BD no encontrada. Devolviendo null.`);
+    // PRODUCCIÓN: logger.error({ action: 'getVehicleById', vehicleId: id, reason: 'DB config not found' });
     return null;
   }
   // PRODUCCIÓN: logger.info({ action: 'getVehicleById', dbType: dbClient.type, vehicleId: id }, "Attempting to fetch vehicle by ID");
@@ -474,7 +493,7 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
     try {
       const request = pool.request();
       request.input('idToFind_get', sql.NVarChar(50), id); 
-      const result = await request.query("SELECT id, plateNumber, vin, brand, model, year, fuelType, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, createdAt, updatedAt FROM vehicles WHERE id = @idToFind_get");
+      const result = await request.query("SELECT id, plateNumber, vin, brand, model, year, fuelType, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, createdAt, updatedAt, imageUrl FROM vehicles WHERE id = @idToFind_get");
       
       if (result.recordset.length > 0) {
         const row = result.recordset[0];
@@ -488,18 +507,19 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
           fuelType: row.fuelType,
           currentMileage: row.currentMileage,
           nextPreventiveMaintenanceMileage: row.nextPreventiveMaintenanceMileage,
-          nextPreventiveMaintenanceDate: row.nextPreventiveMaintenanceDate ? new Date(row.nextPreventiveMaintenanceDate).toISOString().split('T')[0] : "", 
+          nextPreventiveMaintenanceDate: row.nextPreventiveMaintenanceDate ? new Date(row.nextPreventiveMaintenanceDate).toISOString().split('T')[0] : "", // Asegurar formato YYYY-MM-DD
           status: row.status,
           createdAt: new Date(row.createdAt).toISOString(),
-          updatedAt: new Date(row.updatedAt).toISOString()
+          updatedAt: new Date(row.updatedAt).toISOString(),
+          imageUrl: row.imageUrl
         } as Vehicle;
       }
       // PRODUCCIÓN: logger.warn({ action: 'getVehicleById', vehicleId: id, reason: 'Not found' }, "Vehicle not found by ID");
-      return null;
+      return null; // Vehículo no encontrado
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getVehicleById', vehicleId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error fetching vehicle by ID from SQL Server");
       console.error(\`[SQL Server Error] Error al obtener vehículo por ID ${id}:\`, error);
-      return null;
+      return null; // Devolver null en caso de error
     }
   } else {
     // PRODUCCIÓN: logger.warn({ action: 'getVehicleById', vehicleId: id, dbType: dbClient.type, reason: 'DB type not implemented' });
@@ -508,15 +528,17 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
   }
   */
   
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Get Vehicle By ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${id}. Devolviendo null.`);
   return null;
 }
 
+// Nueva función para obtener el conteo de mantenimientos próximos para el dashboard
 export async function getUpcomingMaintenanceCount(): Promise<number> {
   const dbClient = await getDbClient();
   if (!dbClient) {
-    console.warn("getUpcomingMaintenanceCount: Configuración de BD no encontrada o conexión fallida. Devolviendo 0.");
-    // PRODUCCIÓN: logger.error({ action: 'getUpcomingMaintenanceCount', reason: 'DB client not available' });
+    console.warn("getUpcomingMaintenanceCount: Configuración de BD no encontrada. Devolviendo 0.");
+    // PRODUCCIÓN: logger.error({ action: 'getUpcomingMaintenanceCount', reason: 'DB config not found' });
     return 0;
   }
   // PRODUCCIÓN: logger.info({ action: 'getUpcomingMaintenanceCount', dbType: dbClient.type }, "Attempting to fetch upcoming maintenance count");
@@ -532,16 +554,19 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
     }
     try {
       const request = pool.request();
-      const DAYS_THRESHOLD = 7; 
-      const MILEAGE_THRESHOLD = 1000;
+      const DAYS_THRESHOLD = 7; // Mantenimiento en los próximos 7 días
+      const MILEAGE_THRESHOLD = 1000; // Mantenimiento en los próximos 1000 km
 
+      // No es necesario pasar los umbrales como parámetros SQL si son constantes aquí,
+      // pero si fueran dinámicos, sí lo harías con request.input().
+      // Para DATEDIFF, GETDATE() obtiene la fecha actual del servidor SQL.
       const query = \`
         SELECT COUNT(*) AS upcomingCount
         FROM vehicles
         WHERE status = 'Activo' AND (
-          (nextPreventiveMaintenanceDate IS NOT NULL AND DATEDIFF(day, GETDATE(), nextPreventiveMaintenanceDate) BETWEEN 0 AND \${DAYS_THRESHOLD})
+          (nextPreventiveMaintenanceDate IS NOT NULL AND DATEDIFF(day, GETDATE(), nextPreventiveMaintenanceDate) BETWEEN 0 AND ${DAYS_THRESHOLD})
           OR
-          (nextPreventiveMaintenanceMileage IS NOT NULL AND currentMileage IS NOT NULL AND (nextPreventiveMaintenanceMileage - currentMileage) BETWEEN 0 AND \${MILEAGE_THRESHOLD})
+          (nextPreventiveMaintenanceMileage IS NOT NULL AND currentMileage IS NOT NULL AND (nextPreventiveMaintenanceMileage - currentMileage) BETWEEN 0 AND ${MILEAGE_THRESHOLD})
         )
       \`;
       const result = await request.query(query);
@@ -559,6 +584,7 @@ export async function getUpcomingMaintenanceCount(): Promise<number> {
   }
   */
 
+  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
   console.log(`[Get Upcoming Maintenance Count] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo 0.`);
   return 0;
 }

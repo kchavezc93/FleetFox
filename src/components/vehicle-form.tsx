@@ -38,8 +38,7 @@ import React from "react";
 
 interface VehicleFormProps {
   vehicle?: Vehicle | null;
-  vehicleId?: string; // Add vehicleId prop for edit mode
-  onSubmitAction: (id: string | undefined, data: VehicleFormData) => Promise<{ message: string; errors?: any; vehicle?: Vehicle }>;
+  onSubmitAction: (data: VehicleFormData) => Promise<{ message: string; errors?: any; vehicle?: Vehicle }>;
 }
 
 export function VehicleForm({ vehicle, onSubmitAction }: VehicleFormProps) {
@@ -94,7 +93,7 @@ export function VehicleForm({ vehicle, onSubmitAction }: VehicleFormProps) {
         ...data,
         nextPreventiveMaintenanceDate: data.nextPreventiveMaintenanceDate, 
       };
-      const result = await onSubmitAction(vehicle?.id, formDataForAction); // Pass vehicle.id if in edit mode
+      const result = await onSubmitAction(formDataForAction);
       toast({
         title: "Éxito",
         description: result.message,

@@ -19,12 +19,12 @@ export async function saveUser(data: UserSchema, existingId?: string): Promise<{
   const dbClient = await getDbClient();
 
   if (!dbClient) {
-    console.error("[Save User Error] Configuración de BD no encontrada o conexión fallida.");
-    // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'saveUser', email: data.email, reason: 'DB client not available' });
+    console.error("[Save User Error] Configuración de BD no encontrada.");
+    // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'saveUser', email: data.email, reason: 'DB config not found' });
     return { 
       success: false, 
-      message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo guardar el usuario. Por favor, revise la configuración de variables de entorno.",
-      errors: { form: "Error de conexión a BD." }
+      message: "Error de configuración: No se pudo conectar a la base de datos. Por favor, revise la configuración de variables de entorno.",
+      errors: { form: "Configuración de BD requerida." }
     };
   }
   
@@ -197,8 +197,8 @@ export async function saveUser(data: UserSchema, existingId?: string): Promise<{
 export async function getUsers(): Promise<UserProfile[]> {
     const dbClient = await getDbClient();
     if (!dbClient) {
-        console.error("getUsers: Configuración de BD no encontrada o conexión fallida. Devolviendo lista vacía.");
-        // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'getUsers', reason: 'DB client not available' });
+        console.error("getUsers: Configuración de BD no encontrada. Devolviendo lista vacía.");
+        // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'getUsers', reason: 'DB config not found' });
         return [];
     }
     // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'getUsers', dbType: dbClient.type }, "Attempting to fetch all users");
@@ -244,9 +244,9 @@ export async function getUsers(): Promise<UserProfile[]> {
 export async function deleteUser(id: string): Promise<{ success: boolean; message: string }> {
     const dbClient = await getDbClient();
     if (!dbClient) {
-        console.error(`deleteUser(${id}): Error de configuración de BD o conexión fallida. No se pudo eliminar el usuario.`);
-        // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'deleteUser', userId: id, reason: 'DB client not available' });
-        return { success: false, message: "Error: Cliente de base de datos no disponible o conexión fallida. No se pudo eliminar el usuario."};
+        console.error(`deleteUser(${id}): Error de configuración de BD. No se pudo eliminar el usuario.`);
+        // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'deleteUser', userId: id, reason: 'DB config not found' });
+        return { success: false, message: "Error de configuración de BD. No se pudo eliminar el usuario."};
     }
     // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'deleteUser', dbType: dbClient.type, userId: id }, "Attempting to delete user");
 

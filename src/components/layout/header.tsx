@@ -13,9 +13,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// LanguageSelector and useTranslation imports are already removed.
+// Removed: import { LanguageSelector } from "@/components/language-selector";
+// Removed: import { useTranslation } from "@/hooks/use-translation";
+
 
 export function Header() {
+  // Removed: const { t } = useTranslation();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
@@ -23,6 +26,7 @@ export function Header() {
         {/* Optional: Breadcrumbs or Page Title can go here */}
       </div>
       <div className="flex items-center gap-2 md:gap-4">
+        {/* Removed: <LanguageSelector /> */}
         <Button variant="ghost" size="icon" className="rounded-full" aria-label="Notificaciones">
           <Bell className="h-5 w-5" />
           <span className="sr-only">Notificaciones</span>
