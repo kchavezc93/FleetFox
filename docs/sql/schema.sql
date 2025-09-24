@@ -11,6 +11,7 @@ BEGIN
     passwordHash NVARCHAR(255) NOT NULL,
     role NVARCHAR(50) NOT NULL DEFAULT 'Standard',
     permissions NVARCHAR(MAX) NULL,
+    active BIT NOT NULL DEFAULT 1,
     createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
   );
@@ -152,6 +153,7 @@ BEGIN
     createdByUserId INT NULL,
     updatedByUserId INT NULL,
     createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    resolvedAt DATETIME2 NULL,
     CONSTRAINT FK_alerts_vehicles FOREIGN KEY (vehicleId) REFERENCES dbo.vehicles(id) ON DELETE CASCADE
   );
   CREATE INDEX IX_alerts_vehicleId ON dbo.alerts(vehicleId);
@@ -176,6 +178,49 @@ GO
 IF OBJECT_ID('dbo.trg_maintenance_logs_updatedAt', 'TR') IS NULL
 BEGIN
   EXEC('CREATE TRIGGER dbo.trg_maintenance_logs_updatedAt ON dbo.maintenance_logs AFTER UPDATE AS BEGIN SET NOCOUNT ON; UPDATE m SET updatedAt = SYSUTCDATETIME() FROM dbo.maintenance_logs m JOIN inserted i ON m.id = i.id; END');
+END
+GO
+
+-- Settings table (singleton-ish; app reads latest row). Includes optional audit columns.
+IF OBJECT_ID('dbo.settings', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.settings (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    alert_daysThreshold INT NULL,
+    alert_mileageThreshold INT NULL,
+    alert_lowEfficiencyThresholdKmPerGallon DECIMAL(10,2) NULL,
+    alert_highMaintenanceCostThreshold DECIMAL(18,2) NULL,
+    alert_maintenanceCostWindowDays INT NULL,
+    createdAt DATETIME2 NULL,
+    updatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    createdByUserId INT NULL,
+    updatedByUserId INT NULL
+  );
+  -- Seed defaults
+  INSERT INTO dbo.settings (
+    alert_daysThreshold, alert_mileageThreshold, alert_lowEfficiencyThresholdKmPerGallon,
+    alert_highMaintenanceCostThreshold, alert_maintenanceCostWindowDays
+  ) VALUES (30, 2000, 10.00, 20000.00, 30);
+END
+GO
+
+-- Vehicle documents with expiry dates
+IF OBJECT_ID('dbo.vehicle_documents', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.vehicle_documents (
+    id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY,
+    vehicleId INT NOT NULL,
+    documentType NVARCHAR(100) NOT NULL,
+    documentNumber NVARCHAR(100) NULL,
+    issueDate DATE NULL,
+    expiryDate DATE NULL,
+    status NVARCHAR(20) NULL,
+    notes NVARCHAR(MAX) NULL,
+    createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    updatedAt DATETIME2 NULL
+  );
+  CREATE INDEX IX_vehicle_documents_expiry ON dbo.vehicle_documents(expiryDate);
+  ALTER TABLE dbo.vehicle_documents ADD CONSTRAINT FK_vehicle_documents_vehicles FOREIGN KEY (vehicleId) REFERENCES dbo.vehicles(id) ON DELETE CASCADE;
 END
 GO
 
@@ -257,6 +302,10 @@ IF COL_LENGTH('dbo.alerts', 'updatedByUserId') IS NULL
 BEGIN
   ALTER TABLE dbo.alerts ADD updatedByUserId INT NULL;
 END
+IF COL_LENGTH('dbo.alerts', 'resolvedAt') IS NULL
+BEGIN
+  ALTER TABLE dbo.alerts ADD resolvedAt DATETIME2 NULL;
+END
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_alerts_createdBy_users')
 BEGIN
   ALTER TABLE dbo.alerts WITH CHECK ADD CONSTRAINT FK_alerts_createdBy_users FOREIGN KEY (createdByUserId) REFERENCES dbo.users(id);
@@ -266,3 +315,32 @@ BEGIN
   ALTER TABLE dbo.alerts WITH CHECK ADD CONSTRAINT FK_alerts_updatedBy_users FOREIGN KEY (updatedByUserId) REFERENCES dbo.users(id);
 END
 GO
+
+-- Users 'active' column backfill (required by application logic)
+IF COL_LENGTH('dbo.users', 'active') IS NULL
+BEGIN
+  ALTER TABLE dbo.users ADD active BIT NOT NULL CONSTRAINT DF_users_active DEFAULT (1);
+END
+GO
+
+-- Settings audit columns backfill (optional)
+IF COL_LENGTH('dbo.settings', 'createdAt') IS NULL
+BEGIN
+  ALTER TABLE dbo.settings ADD createdAt DATETIME2 NULL;
+END
+IF COL_LENGTH('dbo.settings', 'createdByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.settings ADD createdByUserId INT NULL;
+END
+IF COL_LENGTH('dbo.settings', 'updatedByUserId') IS NULL
+BEGIN
+  ALTER TABLE dbo.settings ADD updatedByUserId INT NULL;
+END
+GO
+
+/*
+Optional: Seed first admin user (uncomment and replace hash/email before running).
+-- IF COL_LENGTH('dbo.users', 'active') IS NULL BEGIN ALTER TABLE dbo.users ADD active BIT NOT NULL CONSTRAINT DF_users_active DEFAULT (1); END
+-- INSERT INTO dbo.users (email, username, fullName, passwordHash, role, permissions, active, createdAt, updatedAt)
+-- VALUES ('admin@tu-dominio.com','admin',N'Administrador','<PEGA_AQUI_TU_BCRYPT_HASH>','Admin','[]',1,SYSUTCDATETIME(),SYSUTCDATETIME());
+*/

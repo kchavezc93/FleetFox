@@ -122,7 +122,92 @@ npm run build
 ```
 Esto creará una compilación optimizada de la aplicación en la carpeta `.next`.
 
+## Checklist rápido para DEV (Windows) 🧭
+
+1) Preparar variables de entorno
+- Copia `.env.example` a `.env` y completa:
+    - `NEXT_PUBLIC_COMPANY_NAME`, `NEXT_PUBLIC_COMPANY_LOGO_URL`
+    - `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_TYPE`
+    - `DB_ENCRYPT`, `DB_TRUST_SERVER_CERTIFICATE`
+    - `SESSION_TTL_DAYS` (días de vigencia de sesión, ej. `7`)
+- Opcional en DEV: crea `src/db.config.json` desde `src/db.config.example.json` si prefieres no usar `.env`.
+
+2) Instalar dependencias
+```powershell
+npm install
+```
+
+3) Verificación rápida
+```powershell
+npm run typecheck
+```
+
+4) Build y arranque
+```powershell
+npm run build
+npm run start
+```
+
+Si PowerShell bloquea scripts, usa cmd para ejecutar los scripts de npm:
+```powershell
+cmd /c "npm run build"
+cmd /c "npm run start"
+```
+
+5) Smoke tests sugeridos
+- Acceso: ir a `/` debe redirigir a login si no hay sesión; con sesión válida, al dashboard.
+- Login/Logout: iniciar sesión con un usuario válido; cerrar sesión desde el header.
+- Rutas protegidas: no autenticado no debe acceder a `/vehicles`, `/maintenance`, `/fueling`, `/reports`, `/settings`.
+- Vehículos: crear/editar; activar/inactivar; exportar listado a XLSX.
+- Combustible: crear y listar con filtros; exportar a XLSX.
+- Mantenimiento: crear/editar; adjuntar/eliminar archivos; exportar a XLSX con columnas de auditoría.
+- Usuarios (admin): activar/desactivar; eliminar con confirmación; exportar a XLSX.
+- Settings: guardar umbrales; verificar auditoría (creado/actualizado por) y que afecte generación de alertas.
+- Alertas: generar/actualizar estado; ver “Creado por” en UI.
+
 ## Despliegue recomendado
+
+## Crear el primer usuario administrador 👤
+
+La aplicación no viene con un usuario por defecto. Crea el primer admin en tu SQL Server con una contraseña hasheada en bcrypt.
+
+1) Generar hash bcrypt de tu contraseña (Windows PowerShell)
+```powershell
+node -e "const b=require('bcryptjs');(async()=>{const h=await b.hash(process.argv[1],10);console.log(h)})()" "TuPasswordFuerte!"
+```
+Guarda el hash impreso (empieza con $2a$/$2b$).
+
+2) Insertar el usuario Admin en SQL Server
+Ejecuta este T-SQL (ajusta email/username/nombre y pega tu hash):
+
+```sql
+-- Si la columna 'active' no existe aún, créala (el código la usa)
+IF COL_LENGTH('dbo.users', 'active') IS NULL
+BEGIN
+    ALTER TABLE dbo.users ADD active BIT NOT NULL CONSTRAINT DF_users_active DEFAULT (1);
+END
+GO
+
+INSERT INTO dbo.users (
+    email, username, fullName, passwordHash, role, permissions, active, createdAt, updatedAt
+)
+VALUES (
+    'admin@tu-dominio.com',    -- email
+    'admin',                   -- username
+    N'Administrador',          -- nombre para mostrar
+    '<PEGA_AQUI_TU_BCRYPT_HASH>', -- hash bcrypt generado arriba
+    'Admin',                   -- rol
+    '[]',                      -- permisos (JSON)
+    1,                         -- activo
+    SYSUTCDATETIME(),
+    SYSUTCDATETIME()
+);
+```
+
+3) Iniciar sesión
+- Email: el que insertaste (p.ej. admin@tu-dominio.com)
+- Contraseña: la que usaste para generar el hash
+- Nota: el login requiere que el usuario esté activo (active = 1) y busca por email en minúsculas.
 
 Para producción, la opción más estable y simple es ejecutar la app Node.js con PM2 detrás de un reverse proxy (Nginx) en Linux. Funciona también en Windows, pero Linux suele ser más predecible para Next.js y `mssql`.
 

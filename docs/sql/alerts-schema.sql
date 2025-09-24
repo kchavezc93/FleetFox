@@ -1,19 +1,10 @@
--- SQL Server schema for alerts table
+-- NOTE: La fuente de verdad es docs/sql/schema.sql. Este archivo muestra un ejemplo alternativo.
+-- La aplicación espera:
+-- - alerts.id INT IDENTITY
+-- - alerts.vehicleId INT (FK a vehicles.id INT)
+-- - columnas: alertType NVARCHAR(50), message NVARCHAR(255), dueDate DATE NULL, status NVARCHAR(50), severity NVARCHAR(50) NULL,
+--             createdByUserId INT NULL, updatedByUserId INT NULL, createdAt DATETIME2 DEFAULT SYSUTCDATETIME(), resolvedAt DATETIME2 NULL
+-- Para mantener consistencia, usa schema.sql. Si ya tienes una tabla distinta, migra a la estructura indicada.
 
-CREATE TABLE alerts (
-  id UNIQUEIDENTIFIER DEFAULT NEWID() PRIMARY KEY,
-  vehicleId NVARCHAR(50) NOT NULL,
-  alertType NVARCHAR(100) NOT NULL, -- 'PreventiveMaintenanceDue' | 'DocumentExpiry' | 'LowMileageEfficiency' | 'HighMaintenanceCost'
-  message NVARCHAR(MAX) NOT NULL,
-  dueDate DATE NULL,
-  status NVARCHAR(20) NOT NULL DEFAULT N'Nueva', -- 'Nueva' | 'Vista' | 'Resuelta'
-  severity NVARCHAR(20) NULL, -- 'Low' | 'Medium' | 'High'
-  createdAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-  resolvedAt DATETIME2 NULL
-);
-
--- Optional index to quickly fetch open/recent alerts
-CREATE INDEX IX_alerts_status_createdAt ON alerts(status, createdAt DESC);
-
--- Foreign key if vehicles.id is NVARCHAR(50) or UNIQUEIDENTIFIER
--- ALTER TABLE alerts ADD CONSTRAINT FK_alerts_vehicles FOREIGN KEY (vehicleId) REFERENCES vehicles(id);
+-- Índice recomendado (opcional)
+-- CREATE INDEX IX_alerts_status_createdAt ON alerts(status, createdAt DESC);
