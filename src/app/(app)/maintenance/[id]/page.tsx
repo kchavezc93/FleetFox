@@ -2,7 +2,7 @@
 import { getMaintenanceLogById, deleteMaintenanceLog } from "@/lib/actions/maintenance-actions";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Wrench, CalendarDays,Gauge, Tag, Users, Construction, DollarSign, FileText, Edit, Trash2, Paperclip, FileDown as FileDownIcon } from "lucide-react";
+import { Wrench, CalendarDays,Gauge, Tag, Users, Construction, DollarSign, FileText, Edit, Trash2, Paperclip, FileDown as FileDownIcon, User as UserIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -80,7 +80,7 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
               </Button>
             </Link>
             <form action={handleDeleteAction}>
-              <Button variant="destructive" type="submit">
+              <Button variant="destructive" type="submit" onClick={(e) => { if (!confirm('¿Eliminar este registro de mantenimiento?')) { e.preventDefault(); } }}>
                 <Trash2 className="mr-2 h-4 w-4" /> Eliminar
               </Button>
             </form>
@@ -114,6 +114,15 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
             {log.nextMaintenanceDateScheduled && <DetailItem icon={CalendarDays} label="Próximo Mantenimiento (Fecha)" value={format(new Date(log.nextMaintenanceDateScheduled + "T00:00:00"), "PPP", { locale: es })} />}
             {log.nextMaintenanceMileageScheduled && <DetailItem icon={Gauge} label="Próximo Mantenimiento (Kilometraje)" value={`${log.nextMaintenanceMileageScheduled.toLocaleString()} km`} />}
             <DetailItem icon={CalendarDays} label="Fecha de Creación del Registro" value={format(new Date(log.createdAt), "PPPp", { locale: es })} />
+            {log.createdByUsername || log.createdByUserId ? (
+              <DetailItem icon={UserIcon} label="Creado por" value={log.createdByUsername ?? `Usuario #${log.createdByUserId}`} />
+            ) : null}
+            {log.updatedAt ? (
+              <DetailItem icon={CalendarDays} label="Última Actualización del Registro" value={format(new Date(log.updatedAt), "PPPp", { locale: es })} />
+            ) : null}
+            {log.updatedByUsername || log.updatedByUserId ? (
+              <DetailItem icon={UserIcon} label="Actualizado por" value={log.updatedByUsername ?? `Usuario #${log.updatedByUserId}`} />
+            ) : null}
           </div>
           
           <div className="pt-4 border-t">

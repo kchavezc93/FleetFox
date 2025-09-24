@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { History, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
+import { exportToXLSX } from "@/lib/export-excel";
 import type { MaintenanceLog, Vehicle } from "@/types";
 import {
   Table,
@@ -101,6 +102,31 @@ export default function MaintenanceHistoryReportPage() {
     }
   };
 
+  const handleExportXLSX = async () => {
+    if (enrichedLogs.length === 0) return;
+    const rows = enrichedLogs.map(log => ({
+      plate: log.vehiclePlateNumber,
+      brandModel: `${log.vehicleBrand || ''} ${log.vehicleModel || ''}`.trim(),
+      execDate: format(new Date(log.executionDate + "T00:00:00"), "yyyy-MM-dd"),
+      type: log.maintenanceType,
+      mileage: log.mileageAtService,
+      cost: Number(log.cost.toFixed(2)),
+      provider: log.provider,
+    }));
+    await exportToXLSX({
+      rows,
+      columns: [
+        { key: "plate", header: "Vehículo (Matrícula)", width: 18 },
+        { key: "brandModel", header: "Marca y Modelo", width: 28 },
+        { key: "execDate", header: "Fecha Ejecución", format: "date" },
+        { key: "type", header: "Tipo" },
+        { key: "mileage", header: "Kilometraje", format: "integer" },
+        { key: "cost", header: "Costo (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "provider", header: "Proveedor" },
+      ],
+    }, "informe_historial_mantenimiento", "Historial");
+  };
+
   return (
     <>
       <PageHeader
@@ -118,9 +144,14 @@ export default function MaintenanceHistoryReportPage() {
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={enrichedLogs.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleExportCSV} disabled={enrichedLogs.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> CSV
+              </Button>
+              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={enrichedLogs.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+              </Button>
+            </div>
           </div>
         }
       />

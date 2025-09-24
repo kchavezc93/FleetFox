@@ -67,7 +67,12 @@ const navItemConfigs: NavItemConfig[] = [
   { key: "settings", href: "/settings", defaultLabel: "Configuración", icon: Settings },
 ];
 
-export function SidebarNav() {
+type SidebarNavProps = {
+  userRole?: 'Admin' | 'Standard';
+  userPermissions?: string[];
+};
+
+export function SidebarNav({ userRole = 'Standard', userPermissions = [] }: SidebarNavProps) {
   const pathname = usePathname();
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({});
 
@@ -121,7 +126,8 @@ export function SidebarNav() {
                    <Link href={subItemConfig.href} passHref legacyBehavior>
                     <SidebarMenuSubButton
                       isActive={pathname === subItemConfig.href || pathname.startsWith(subItemConfig.href)}
-                      disabled={subItemConfig.disabled}
+                      aria-disabled={subItemConfig.disabled}
+                      className={subItemConfig.disabled ? 'pointer-events-none opacity-50' : undefined}
                     >
                       {subItemConfig.defaultLabel} 
                     </SidebarMenuSubButton>
@@ -153,11 +159,18 @@ export function SidebarNav() {
   };
 
 
+  const filteredNavItems = navItemConfigs.map(item => {
+    if (item.key === 'settings' || item.key === 'userManagement') {
+      return { ...item, disabled: userRole !== 'Admin' };
+    }
+    return item;
+  });
+
   return (
     <SidebarMenu>
       <SidebarGroup>
         <SidebarGroupLabel>Menú</SidebarGroupLabel> 
-        {navItemConfigs.map((item) => renderNavItem(item))}
+        {filteredNavItems.map((item) => renderNavItem(item))}
       </SidebarGroup>
     </SidebarMenu>
   );

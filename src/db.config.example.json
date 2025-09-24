@@ -1,0 +1,8 @@
+{
+  "dbType": "SQLServer",
+  "dbHost": "localhost",
+  "dbPort": 1433,
+  "dbUser": "sa",
+  "dbPassword": "yourStrong(!)Password",
+  "dbName": "dos_robles_fleet_db"
+}

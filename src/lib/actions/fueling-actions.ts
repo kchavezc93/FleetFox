@@ -6,6 +6,7 @@ import { fuelingLogSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { getDbClient } from "@/lib/db";
 import sql from 'mssql'; // Descomentar si se instala y usa 'mssql'
+import { getCurrentUser } from "@/lib/auth/session";
 
 const LITERS_PER_GALLON = 3.78541;
 
@@ -41,6 +42,8 @@ export async function createFuelingLog(formData: FuelingFormData) {
     
     const transaction = new sql.Transaction(pool);
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       await transaction.begin();
 
       let vehiclePlateNumber = "N/A";
@@ -96,13 +99,13 @@ export async function createFuelingLog(formData: FuelingFormData) {
           INSERT INTO fueling_logs (
             vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters, 
             costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, 
-            createdAt, updatedAt
+            createdByUserId, updatedByUserId, createdAt, updatedAt
           )
           OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
           VALUES (
             @fl_vehicleId, @fl_vehiclePlateNumber, @fl_fuelingDate, @fl_mileageAtFueling, @fl_quantityLiters,
             @fl_costPerLiter, @fl_totalCost, @fl_station, @fl_imageUrl, @fl_fuelEfficiency,
-            GETDATE(), GETDATE()
+            ${userIdInt !== null ? userIdInt : 'NULL'}, ${userIdInt !== null ? userIdInt : 'NULL'}, GETDATE(), GETDATE()
           );
       `);
       
@@ -127,7 +130,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
           const updateVehicleRequest = transaction.request(); 
           updateVehicleRequest.input('upd_v_id_mileage', sql.NVarChar(50), data.vehicleId);
           updateVehicleRequest.input('upd_v_mileage_val', sql.Int, data.mileageAtFueling);
-          await updateVehicleRequest.query('UPDATE vehicles SET currentMileage = @upd_v_mileage_val, updatedAt = GETDATE() WHERE id = @upd_v_id_mileage');
+          await updateVehicleRequest.query(`UPDATE vehicles SET currentMileage = @upd_v_mileage_val, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @upd_v_id_mileage`);
       }
       
       await transaction.commit();
@@ -276,4 +279,217 @@ export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<Fuel
     
     // console.log(`[Get Fueling Logs By Vehicle ID] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Vehículo ID: ${vehicleId}. Devolviendo lista vacía.`);
     // return [];
+}
+
+// Obtener un registro de combustible por ID
+export async function getFuelingLogById(id: string): Promise<FuelingLog | null> {
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
+    console.warn(`[Get Fueling Log By Id] DB no disponible o tipo no soportado.`);
+    return null;
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  try {
+    const request = pool.request();
+    request.input('id_find', sql.NVarChar(50), id);
+    const result = await request.query(`
+      SELECT TOP 1 
+        id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
+        costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
+      FROM fueling_logs 
+      WHERE id = @id_find
+    `);
+    if (!result.recordset.length) return null;
+    const row = result.recordset[0];
+    const log: FuelingLog = {
+      id: row.id.toString(),
+      vehicleId: row.vehicleId,
+      vehiclePlateNumber: row.vehiclePlateNumber,
+      fuelingDate: new Date(row.fuelingDate).toISOString().split('T')[0],
+      mileageAtFueling: row.mileageAtFueling,
+      quantityLiters: parseFloat(row.quantityLiters),
+      costPerLiter: parseFloat(row.costPerLiter),
+      totalCost: parseFloat(row.totalCost),
+      station: row.station,
+      imageUrl: row.imageUrl || undefined,
+      fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
+      createdAt: new Date(row.createdAt).toISOString(),
+    };
+    return log;
+  } catch (err) {
+    console.error(`[SQL Server Error] getFuelingLogById`, err);
+    return null;
+  }
+}
+
+// Actualizar un registro de combustible existente
+export async function updateFuelingLog(id: string, formData: FuelingFormData) {
+  const validatedFields = fuelingLogSchema.safeParse(formData);
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Datos de formulario inválidos.',
+      success: false,
+    };
+  }
+
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
+    return { message: 'Tipo de BD no soportado o pool no disponible.', success: false };
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  const data = validatedFields.data;
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    const currentUser = await getCurrentUser();
+    const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
+    await transaction.begin();
+
+    // Recalcular eficiencia usando registro previo
+    let fuelEfficiencyKmPerGallon: number | null = null;
+    const prevLogRequest = transaction.request();
+    prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), data.vehicleId);
+    prevLogRequest.input('prev_fuelingDate_eff', sql.Date, data.fuelingDate);
+    prevLogRequest.input('currentId', sql.NVarChar(50), id);
+    const prevLogResult = await prevLogRequest.query(`
+      SELECT TOP 1 mileageAtFueling, quantityLiters
+      FROM fueling_logs
+      WHERE vehicleId = @prev_vehicleId_eff AND fuelingDate < @prev_fuelingDate_eff AND id <> @currentId
+      ORDER BY fuelingDate DESC, createdAt DESC
+    `);
+    if (prevLogResult.recordset.length > 0) {
+      const prevLog = prevLogResult.recordset[0];
+      const mileageDifference = data.mileageAtFueling - prevLog.mileageAtFueling;
+      const gallonsUsedCurrent = data.quantityLiters / LITERS_PER_GALLON;
+      if (gallonsUsedCurrent > 0 && mileageDifference > 0) {
+        fuelEfficiencyKmPerGallon = parseFloat((mileageDifference / gallonsUsedCurrent).toFixed(1));
+      }
+    }
+
+    // Metadatos del vehículo
+    const vehicleMetaReq = transaction.request();
+    vehicleMetaReq.input('vId_meta', sql.NVarChar(50), data.vehicleId);
+    const vehicleMeta = await vehicleMetaReq.query('SELECT plateNumber, currentMileage FROM vehicles WHERE id = @vId_meta');
+    const vehiclePlateNumber = vehicleMeta.recordset[0]?.plateNumber || 'N/A';
+    const originalVehicleMileage = vehicleMeta.recordset[0]?.currentMileage || 0;
+
+    const updReq = transaction.request();
+    updReq.input('id_upd', sql.NVarChar(50), id);
+    updReq.input('vId', sql.NVarChar(50), data.vehicleId);
+    updReq.input('date', sql.Date, data.fuelingDate);
+    updReq.input('mileage', sql.Int, data.mileageAtFueling);
+    updReq.input('liters', sql.Decimal(10, 2), data.quantityLiters);
+    updReq.input('cpl', sql.Decimal(10, 2), data.costPerLiter);
+    updReq.input('total', sql.Decimal(10, 2), data.totalCost);
+    updReq.input('station', sql.NVarChar(100), data.station);
+    updReq.input('imageUrl', sql.NVarChar(255), data.imageUrl || null);
+    updReq.input('eff', sql.Decimal(10, 1), fuelEfficiencyKmPerGallon);
+
+    await updReq.query(`
+      UPDATE fueling_logs
+      SET 
+        vehicleId = @vId,
+        vehiclePlateNumber = '${vehiclePlateNumber}',
+        fuelingDate = @date,
+        mileageAtFueling = @mileage,
+        quantityLiters = @liters,
+        costPerLiter = @cpl,
+        totalCost = @total,
+        station = @station,
+        imageUrl = @imageUrl,
+        fuelEfficiencyKmPerGallon = @eff,
+        updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
+        updatedAt = GETDATE()
+      WHERE id = @id_upd;
+    `);
+
+    if (data.mileageAtFueling > originalVehicleMileage) {
+      const updateVehicleRequest = transaction.request();
+      updateVehicleRequest.input('vId', sql.NVarChar(50), data.vehicleId);
+      updateVehicleRequest.input('mileageVal', sql.Int, data.mileageAtFueling);
+      await updateVehicleRequest.query(`
+        UPDATE vehicles 
+        SET currentMileage = @mileageVal, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE()
+        WHERE id = @vId;
+      `);
+    }
+
+    await transaction.commit();
+    revalidatePath('/fueling');
+    revalidatePath('/reports/fuel-consumption');
+    revalidatePath(`/vehicles/${data.vehicleId}`);
+    return { message: 'Registro de combustible actualizado.', success: true };
+  } catch (err) {
+    await transaction.rollback();
+    console.error(`[SQL Server Error] updateFuelingLog`, err);
+    return { message: 'Error al actualizar el registro.', success: false };
+  }
+}
+
+// Eliminar un registro de combustible
+export async function deleteFuelingLog(id: string) {
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
+    return { message: 'Tipo de BD no soportado o pool no disponible.', success: false };
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  try {
+    const req = pool.request();
+    req.input('id_del', sql.NVarChar(50), id);
+    await req.query('DELETE FROM fueling_logs WHERE id = @id_del');
+    revalidatePath('/fueling');
+    revalidatePath('/reports/fuel-consumption');
+    return { message: 'Registro de combustible eliminado.', success: true };
+  } catch (err) {
+    console.error(`[SQL Server Error] deleteFuelingLog`, err);
+    return { message: 'Error al eliminar el registro.', success: false };
+  }
+}
+
+// Listar con filtros de vehículo y fecha
+export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?: string; to?: string }): Promise<FuelingLog[]> {
+  const { vehicleId, from, to } = params;
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
+    console.warn(`[Get Fueling Logs Filtered] DB no disponible o tipo no soportado.`);
+    return [];
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  try {
+    const request = pool.request();
+    if (vehicleId) request.input('vId', sql.NVarChar(50), vehicleId);
+    if (from) request.input('fromDate', sql.Date, new Date(from));
+    if (to) request.input('toDate', sql.Date, new Date(to));
+    const where: string[] = [];
+    if (vehicleId) where.push('vehicleId = @vId');
+    if (from) where.push('fuelingDate >= @fromDate');
+    if (to) where.push('fuelingDate <= @toDate');
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const result = await request.query(`
+      SELECT 
+        id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
+        costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
+      FROM fueling_logs
+      ${whereSql}
+      ORDER BY fuelingDate DESC, createdAt DESC
+    `);
+    return result.recordset.map((row: any) => ({
+      id: row.id.toString(),
+      vehicleId: row.vehicleId,
+      vehiclePlateNumber: row.vehiclePlateNumber,
+      fuelingDate: new Date(row.fuelingDate).toISOString().split('T')[0],
+      mileageAtFueling: row.mileageAtFueling,
+      quantityLiters: parseFloat(row.quantityLiters),
+      costPerLiter: parseFloat(row.costPerLiter),
+      totalCost: parseFloat(row.totalCost),
+      station: row.station,
+      imageUrl: row.imageUrl || undefined,
+      fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
+      createdAt: new Date(row.createdAt).toISOString(),
+    }));
+  } catch (err) {
+    console.error(`[SQL Server Error] getFuelingLogsFiltered`, err);
+    return [];
+  }
 }

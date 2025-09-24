@@ -22,13 +22,7 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${GeistSans.variable}`} suppressHydrationWarning>
       <body className={`antialiased font-sans`}>
-        <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            storageKey="dosrobles-theme"
-            enableSystem
-            disableTransitionOnChange
-          >
+        <ThemeProvider defaultTheme="system" storageKey="dosrobles-theme">
           <ReactQueryProvider>
             {children}
             <Toaster />

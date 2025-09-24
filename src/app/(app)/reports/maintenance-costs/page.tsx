@@ -1,11 +1,19 @@
 
-"use client"; // This page will need client-side interaction for filters and potentially charts
+"use client"; // Client for interactions; data is aggregated server-side
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Wrench, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
-import type { MaintenanceLog, Vehicle } from "@/types";
+import { exportToXLSX } from "@/lib/export-excel";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
+import { es } from "date-fns/locale";
+import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
+import type { MaintenanceCostSummary } from "@/lib/actions/report-actions";
 import {
   Table,
   TableBody,
@@ -16,59 +24,69 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
+import { getMaintenanceCostSummary } from "@/lib/actions/report-actions";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
+import type { Vehicle } from "@/types";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
-
-type VehicleMaintenanceSummary = {
-  vehicleId: string;
-  plateNumber: string;
-  brandModel: string;
-  totalPreventiveCost: number;
-  totalCorrectiveCost: number;
-  totalCost: number;
-  logCount: number;
-};
 
 export default function MaintenanceCostsReportPage() {
-  const [summaries, setSummaries] = useState<VehicleMaintenanceSummary[]>([]);
+  const [summaries, setSummaries] = useState<MaintenanceCostSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return { from: startOfMonth(today), to: endOfMonth(today) };
+  });
+
+  const applyPreset = (preset: string) => {
+    const today = new Date();
+    let from = today;
+    let to = today;
+    switch (preset) {
+      case "last7":
+        from = subDays(today, 6);
+        break;
+      case "last30":
+        from = subDays(today, 29);
+        break;
+      case "last90":
+        from = subDays(today, 89);
+        break;
+      case "thisMonth":
+        from = startOfMonth(today);
+        to = endOfMonth(today);
+        break;
+      case "lastMonth": {
+        const prev = subMonths(today, 1);
+        from = startOfMonth(prev);
+        to = endOfMonth(prev);
+        break;
+      }
+      case "ytd":
+        from = startOfYear(today);
+        break;
+    }
+    setDateRange({ from, to });
+  };
 
   useEffect(() => {
     async function loadReportData() {
       setIsLoading(true);
       try {
-        const maintenanceLogsData = await getMaintenanceLogs();
-        const vehiclesData = await getVehicles();
-
-        if (!vehiclesData || vehiclesData.length === 0) {
-          setSummaries([]);
-          setIsLoading(false);
-          return;
+        // Load vehicles (once)
+        if (vehicles.length === 0) {
+          const v = await getVehicles();
+          setVehicles(v);
         }
-        
-        const processedSummaries: VehicleMaintenanceSummary[] = vehiclesData.map(vehicle => {
-          const logsForVehicle = maintenanceLogsData.filter(log => log.vehicleId === vehicle.id);
-          const totalPreventiveCost = logsForVehicle
-            .filter(log => log.maintenanceType === "Preventivo")
-            .reduce((sum, log) => sum + log.cost, 0);
-          const totalCorrectiveCost = logsForVehicle
-            .filter(log => log.maintenanceType === "Correctivo")
-            .reduce((sum, log) => sum + log.cost, 0);
-          const totalCost = totalPreventiveCost + totalCorrectiveCost;
-          
-          return {
-            vehicleId: vehicle.id,
-            plateNumber: vehicle.plateNumber,
-            brandModel: `${vehicle.brand} ${vehicle.model}`,
-            totalPreventiveCost,
-            totalCorrectiveCost,
-            totalCost,
-            logCount: logsForVehicle.length
-          };
-        }).filter(summary => summary.logCount > 0);
-
-        setSummaries(processedSummaries);
+        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
+        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
+        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
+        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
+        const data = await getMaintenanceCostSummary(params);
+        setSummaries(data);
       } catch (error) {
         console.error("Error loading maintenance costs report data:", error);
         setSummaries([]);
@@ -77,7 +95,7 @@ export default function MaintenanceCostsReportPage() {
       }
     }
     loadReportData();
-  }, []);
+  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
 
   const handlePrint = () => {
     window.print();
@@ -112,6 +130,29 @@ export default function MaintenanceCostsReportPage() {
     }
   };
 
+  const handleExportXLSX = async () => {
+    if (summaries.length === 0) return;
+    const rows = summaries.map(s => ({
+      plate: s.plateNumber,
+      brandModel: s.brandModel,
+      preventive: Number(s.totalPreventiveCost.toFixed(2)),
+      corrective: Number(s.totalCorrectiveCost.toFixed(2)),
+      total: Number(s.totalCost.toFixed(2)),
+      count: s.logCount,
+    }));
+    await exportToXLSX({
+      rows,
+      columns: [
+        { key: "plate", header: "Vehículo (Matrícula)", width: 18 },
+        { key: "brandModel", header: "Marca y Modelo", width: 28 },
+        { key: "preventive", header: "Costo Preventivo (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "corrective", header: "Costo Correctivo (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "total", header: "Costo Total (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "count", header: "Núm. Registros", format: "integer" },
+      ],
+    }, "informe_costos_mantenimiento", "Costos");
+  };
+
   return (
     <>
       <PageHeader
@@ -120,18 +161,63 @@ export default function MaintenanceCostsReportPage() {
         icon={Wrench}
         actions={
           <div className="page-header-actions flex items-center gap-2">
-            <Button variant="outline" disabled>
-              <CalendarDays className="mr-2 h-4 w-4" /> Rango de Fechas
-            </Button>
-            <Button variant="outline" disabled>
-              <Filter className="mr-2 h-4 w-4" /> Filtros
-            </Button>
+            <div className="hidden md:flex items-center gap-2">
+              <div className="min-w-[220px]">
+                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar vehículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los vehículos</SelectItem>
+                    {vehicles.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    defaultMonth={dateRange?.from}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">Rangos rápidos</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
              <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={summaries.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleExportCSV} disabled={summaries.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> CSV
+              </Button>
+              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={summaries.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+              </Button>
+            </div>
           </div>
         }
       />
@@ -180,17 +266,23 @@ export default function MaintenanceCostsReportPage() {
           <CardDescription>Representación visual de los costos de mantenimiento por tipo o categoría. La funcionalidad completa depende de la implementación de la base de datos.</CardDescription>
         </CardHeader>
         <CardContent>
-          {/* TODO: Replace with actual chart component when data is available */}
-           <div className="h-64 bg-muted rounded-md flex items-center justify-center">
-            <Image 
-              src="https://placehold.co/800x300.png" 
-              alt="Marcador de Posición de Gráfico de Desglose de Costos" 
-              width={800} 
-              height={300}
-              data-ai-hint="cost chart"
-              className="rounded-md"
-            />
-          </div>
+          <ChartContainer
+            config={{
+              preventive: { label: "Preventivo", color: "#2563eb" },
+              corrective: { label: "Correctivo", color: "#f59e0b" },
+            }}
+            className="h-64"
+          >
+            <BarChart data={summaries.map(s => ({ label: s.plateNumber, preventive: s.totalPreventiveCost, corrective: s.totalCorrectiveCost }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="preventive" stackId="cost" fill="var(--color-preventive)" />
+              <Bar dataKey="corrective" stackId="cost" fill="var(--color-corrective)" />
+            </BarChart>
+          </ChartContainer>
         </CardContent>
       </Card>
     </>

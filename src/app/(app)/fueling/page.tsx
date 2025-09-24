@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
-import { Fuel, PlusCircle, FileDown, MoreHorizontal } from "lucide-react";
+import { Fuel, PlusCircle, FileDown, MoreHorizontal, Filter } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -11,19 +11,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getFuelingLogs } from "@/lib/actions/fueling-actions";
+import { getFuelingLogs, getFuelingLogsFiltered, deleteFuelingLog } from "@/lib/actions/fueling-actions";
 import { format } from "date-fns";
+import { getVehicles } from "@/lib/actions/vehicle-actions";
+import { FuelingExportButtons } from "@/components/fueling-export";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { exportToXLSX } from "@/lib/export-excel";
+import { cookies } from "next/headers";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { requirePermission } from "@/lib/authz";
 
 const LITERS_PER_GALLON = 3.78541;
 
-export default async function FuelingPage() {
-  const logs = await getFuelingLogs();
+export default async function FuelingPage({ searchParams }: { searchParams?: { vehicleId?: string; from?: string; to?: string } }) {
+  await requirePermission('/fueling');
+  const vehicleId = searchParams?.vehicleId;
+  const from = searchParams?.from;
+  const to = searchParams?.to;
+  const [logs, vehicles] = await Promise.all([
+    vehicleId || from || to ? getFuelingLogsFiltered({ vehicleId, from, to }) : getFuelingLogs(),
+    getVehicles(),
+  ]);
+  const vehicleMap = new Map(vehicles.map(v => [v.id, `${v.plateNumber} (${v.brand} ${v.model})`]));
 
   return (
     <>
@@ -32,18 +46,47 @@ export default async function FuelingPage() {
         description="Monitorea el consumo de combustible y los costos de toda tu flota."
         icon={Fuel}
         actions={
-          <>
-            <Button variant="outline">
-              <FileDown className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
+          <div className="flex items-center gap-2">
+            <form className="hidden md:flex items-center gap-2" action="/fueling" method="get">
+              <div className="min-w-[220px]">
+                <Select name="vehicleId" defaultValue={vehicleId || "all"}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los vehículos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los vehículos</SelectItem>
+                    {vehicles.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <input type="date" name="from" defaultValue={from || ""} className="border rounded px-2 py-1 text-sm" />
+              <span className="text-sm text-muted-foreground">a</span>
+              <input type="date" name="to" defaultValue={to || ""} className="border rounded px-2 py-1 text-sm" />
+              <Button type="submit" variant="outline">
+                <Filter className="mr-2 h-4 w-4" /> Filtros
+              </Button>
+            </form>
+            <FuelingExportButtons
+              rows={logs.map(l => ({
+                plate: l.vehiclePlateNumber || vehicleMap.get(l.vehicleId) || l.vehicleId,
+                date: l.fuelingDate,
+                mileage: l.mileageAtFueling,
+                gallons: Number((l.quantityLiters / LITERS_PER_GALLON).toFixed(2)),
+                cpg: Number((l.costPerLiter * LITERS_PER_GALLON).toFixed(2)),
+                total: Number(l.totalCost.toFixed(2)),
+                efficiency: l.fuelEfficiencyKmPerGallon ?? null,
+                station: l.station,
+              }))}
+            />
             <Link href="/fueling/new">
               <Button className="bg-primary hover:bg-primary/90">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Registrar Nueva Carga
               </Button>
             </Link>
-          </>
+          </div>
         }
       />
 
@@ -97,8 +140,23 @@ export default async function FuelingPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Ver Detalles</DropdownMenuItem>
-                        {/* <DropdownMenuItem>Editar Registro</DropdownMenuItem> */}
+                        <Link href={`/fueling/${log.id}`}>
+                          <DropdownMenuItem>Ver Detalles</DropdownMenuItem>
+                        </Link>
+                        <Link href={`/fueling/${log.id}/edit`}>
+                          <DropdownMenuItem>Editar Registro</DropdownMenuItem>
+                        </Link>
+                        <form action={async () => { "use server"; await deleteFuelingLog(log.id); }}>
+                          <DropdownMenuItem asChild>
+                            <button
+                              type="submit"
+                              className="w-full text-left text-red-600"
+                              onClick={(e) => { if (!confirm('¿Eliminar este registro de combustible? Esta acción no se puede deshacer.')) { e.preventDefault(); } }}
+                            >
+                              Eliminar
+                            </button>
+                          </DropdownMenuItem>
+                        </form>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

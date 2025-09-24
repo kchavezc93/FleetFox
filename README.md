@@ -1,7 +1,23 @@
 
-# Dos Robles - Aplicación de Gestión de Flota
+# FleetFox (Dos Robles) - Aplicación de Gestión de Flota
 
-Esta aplicación Next.js está diseñada para ayudar a la empresa "Dos Robles" a gestionar su flota de vehículos, incluyendo el seguimiento de mantenimientos, consumo de combustible y generación de informes.
+Aplicación Next.js para gestionar flota vehicular: mantenimientos, combustible, usuarios, sesiones y reportes con agregaciones SQL.
+
+## Stack técnico y scripts
+
+- Next.js 15 (App Router)
+- React 18, TypeScript, React Hook Form + Zod
+- TailwindCSS + shadcn/ui (Radix UI)
+- TanStack Query v5
+- SQL Server (mssql) como base de datos
+
+Scripts disponibles en `package.json`:
+
+- `npm run dev`: arranca Next en modo dev (puerto 9002)
+- `npm run build`: build de producción
+- `npm run start`: servir la build
+- `npm run lint`: ESLint (ignorado en build por `next.config.ts`)
+- `npm run typecheck`: verificación de tipos (tsc)
 
 ## Prerrequisitos
 
@@ -25,25 +41,35 @@ Esta aplicación Next.js está diseñada para ayudar a la empresa "Dos Robles" a
     ```
     Esto instalará Next.js, React, TailwindCSS, ShadCN UI, y otras dependencias como `mssql` (para SQL Server) y `bcryptjs` (para contraseñas).
 
-## Configuración de la Base de Datos SQL Server
+3.  **Variables de Entorno**:
+    - Copia `.env.example` a `.env` y completa los valores.
+    - La app prioriza variables de entorno; en desarrollo puede usar un fallback de archivo (ver abajo).
 
-1.  **Crear la Base de Datos**:
-    *   Conéctate a tu instancia de SQL Server usando SQL Server Management Studio (SSMS) o tu herramienta de administración preferida.
-    *   Crea una nueva base de datos (ej. `dos_robles_fleet_db`).
+4.  **Ejecutar en desarrollo (Windows PowerShell)**:
+    ```powershell
+    npm run dev
+    ```
+    Esto arrancará en `http://localhost:9002`.
 
-2.  **Crear las Tablas**:
-    *   Basándote en la estructura de datos definida en `src/types/index.ts` y los ejemplos de consultas SQL comentados en los archivos dentro de `src/lib/actions/`, crea las siguientes tablas en tu base de datos:
-        *   `vehicles`: Para almacenar información de los vehículos.
-            *   Columnas sugeridas: `id` (PK, ej. `INT IDENTITY(1,1)` o `NVARCHAR(50)` si usas UUIDs generados por la app), `plateNumber` (NVARCHAR, UNIQUE), `vin` (NVARCHAR, UNIQUE), `brand`, `model`, `year` (INT), `fuelType`, `currentMileage` (INT), `nextPreventiveMaintenanceMileage` (INT), `nextPreventiveMaintenanceDate` (DATE), `status`, `imageUrl` (NVARCHAR), `createdAt` (DATETIME2), `updatedAt` (DATETIME2).
-        *   `maintenance_logs`: Para registros de mantenimiento.
-            *   Columnas sugeridas: `id` (PK), `vehicleId` (FK a `vehicles.id`), `vehiclePlateNumber` (NVARCHAR, denormalizado), `maintenanceType`, `executionDate` (DATE), `mileageAtService` (INT), `activitiesPerformed` (NVARCHAR(MAX)), `cost` (DECIMAL(10,2)), `provider`, `nextMaintenanceDateScheduled` (DATE), `nextMaintenanceMileageScheduled` (INT), `createdAt`, `updatedAt`.
-        *   `attached_documents`: Para los archivos adjuntos a los mantenimientos.
-            *   Columnas sugeridas: `id` (PK), `maintenance_log_id` (FK a `maintenance_logs.id`), `file_name` (NVARCHAR(255)), `file_type` (NVARCHAR(100)), `file_content` (VARBINARY(MAX)), `created_at` (DATETIME2).
-        *   `fueling_logs`: Para registros de combustible.
-            *   Columnas sugeridas: `id` (PK), `vehicleId` (FK a `vehicles.id`), `vehiclePlateNumber` (NVARCHAR, denormalizado), `fuelingDate` (DATE), `mileageAtFueling` (INT), `quantityLiters` (DECIMAL(10,2)), `costPerLiter` (DECIMAL(10,2)), `totalCost` (DECIMAL(10,2)), `fuelEfficiencyKmPerGallon` (DECIMAL(10,1), NULLABLE), `station`, `imageUrl` (NVARCHAR, NULLABLE), `createdAt`, `updatedAt`.
-        *   `users`: Para usuarios de la aplicación (requiere implementación de autenticación).
-            *   Columnas sugeridas: `id` (PK), `email` (NVARCHAR, UNIQUE), `username` (NVARCHAR, UNIQUE), `fullName` (NVARCHAR, NULLABLE), `passwordHash` (NVARCHAR - longitud adecuada para el hash bcrypt), `role` (NVARCHAR), `permissions` (NVARCHAR(MAX) para almacenar un JSON array de strings), `createdAt`, `updatedAt`.
-    *   **Importante**: Define `PRIMARY KEY`, `FOREIGN KEY` constraints, `UNIQUE` constraints (para `plateNumber`, `vin`, `email` de usuario), y `NOT NULL` según corresponda. Los campos `createdAt` y `updatedAt` pueden tener `GETDATE()` como valor por defecto.
+## Esquema de Base de Datos (fuente única)
+
+Usa el script SQL en `docs/sql/schema.sql` como fuente de verdad del esquema. Allí se definen tablas, índices y triggers necesarios para:
+
+- users, sessions
+- vehicles
+- fueling_logs
+- maintenance_logs
+- attached_documents
+- alerts (opcional)
+
+Evita duplicar definiciones de tablas en el README; cualquier cambio debe ir a `docs/sql/schema.sql`.
+
+### Fallback local para configuración de BD
+
+Para desarrollo, si las variables de entorno no están completas, `src/lib/db.ts` intentará leer `src/db.config.json`.
+
+- Usa `src/db.config.example.json` como referencia y crea `src/db.config.json` local (no lo subas con credenciales reales).
+- En producción, usa únicamente variables de entorno.
 
 ## Configuración de la Aplicación
 
@@ -80,6 +106,8 @@ Esta aplicación Next.js está diseñada para ayudar a la empresa "Dos Robles" a
         *   Asegúrate de que la interacción con el pool de `mssql` (ej. `pool.request()`, `request.input()`, `request.query()`) sea correcta.
         *   Implementa un manejo de errores robusto para las operaciones de base de datos.
 
+Nota: La conexión a SQL Server está esbozada en `src/lib/db.ts` con un pool global y eventos de error. Ajusta `DB_ENCRYPT`/`DB_TRUST_SERVER_CERTIFICATE` para tu entorno.
+
 ## Ejecutar la Aplicación Localmente (Desarrollo)
 
 ```bash
@@ -98,70 +126,60 @@ yarn build
 ```
 Esto creará una compilación optimizada de la aplicación en la carpeta `.next`.
 
-## Despliegue en un Servidor Windows (Consideraciones)
+## Despliegue recomendado
 
-Desplegar una aplicación Next.js en un servidor Windows con IIS como servidor web es posible, pero requiere configuración. Una alternativa más común para aplicaciones Node.js es usar un gestor de procesos como PM2.
+Para producción, la opción más estable y simple es ejecutar la app Node.js con PM2 detrás de un reverse proxy (Nginx) en Linux. Funciona también en Windows, pero Linux suele ser más predecible para Next.js y `mssql`.
 
-**Opción 1: Usando IIS como Reverse Proxy (con `iisnode` o `ARR`)**
+1) Entorno recomendado
+- SO: Ubuntu 22.04 LTS (o similar)
+- Node: 18.x o 20.x LTS
+- Proxy: Nginx
+- Proceso: PM2
+- BD: SQL Server (Azure SQL, SQL Server en VM/host on-prem)
 
-1.  **Instalar IIS**: Asegúrate de que IIS esté instalado en tu servidor Windows con los módulos necesarios (como URL Rewrite, Application Request Routing - ARR).
-2.  **Instalar `iisnode`**: Este módulo permite a IIS hospedar aplicaciones Node.js.
-3.  **Configurar `web.config`**: Necesitarás un archivo `web.config` en la raíz de tu proyecto para indicarle a IIS cómo manejar tu aplicación Next.js. Este archivo definirá reescrituras de URL y cómo `iisnode` debe ejecutar tu aplicación (generalmente `node server.js` si usas un servidor Next.js personalizado, o el comando de inicio de Next.js).
-    *   Ejemplo básico (puede necesitar ajustes):
-        ```xml
-        <configuration>
-          <system.webServer>
-            <handlers>
-              <add name="iisnode" path="server.js" verb="*" modules="iisnode" />
-            </handlers>
-            <rewrite>
-              <rules>
-                <rule name="DynamicContent">
-                  <conditions>
-                    <add input="{REQUEST_FILENAME}" matchType="IsFile" negate="True"/>
-                  </conditions>
-                  <action type="Rewrite" url="server.js"/>
-                </rule>
-              </rules>
-            </rewrite>
-            <!-- Asegúrate de que las variables de entorno para la BD sean accesibles por el proceso de Node.js -->
-            <!-- <iisnode node_env="production" /> -->
-          </system.webServer>
-        </configuration>
-        ```
-4.  **Iniciar la Aplicación en el Servidor**: Después de construir (`npm run build`), la aplicación se inicia con `npm run start`. IIS (a través de `iisnode`) gestionaría este proceso.
-5.  **Variables de Entorno en IIS**: Configura las variables de entorno (como las credenciales de la BD, `NODE_ENV=production`) a nivel del Application Pool o del sitio en IIS.
+2) Pasos (resumen)
+- Instalar Node y PM2 global: `npm i -g pm2`
+- Instalar dependencias: `npm ci`
+- Build: `npm run build`
+- Arranque: `pm2 start "next start -p 3000" --name fleetfox`
+- Nginx: proxy_pass a `http://localhost:3000`, TLS con Let’s Encrypt
+- Variables de entorno: configurar en el servicio/PM2 (DB_HOST, DB_USER, etc.)
 
-**Opción 2: Usando PM2 (Recomendado para aplicaciones Node.js)**
+3) Windows (si se requiere)
+- Puedes usar PM2 en Windows del mismo modo y front con IIS ARR como reverse proxy. Sin embargo, prioriza Linux si buscas menor fricción operativa.
 
-1.  **Instalar PM2 Globalmente**:
-    ```bash
-    npm install pm2 -g
-    ```
-2.  **Construir la Aplicación**:
-    ```bash
-    npm run build
-    ```
-3.  **Iniciar la Aplicación con PM2**:
-    ```bash
-    # Desde la raíz de tu proyecto
-    pm2 start npm --name "dos-robles-app" -- run start -- --port 3000 
-    # (o el puerto que desees, si `npm start` lo soporta)
-    ```
-    O, si `npm start` directamente ejecuta `next start`:
-    ```bash
-    pm2 start "next start -p 3000" --name "dos-robles-app"
-    ```
-4.  **Configurar IIS como Reverse Proxy a PM2 (Opcional, si quieres usar IIS como frontend)**:
-    *   Puedes configurar un sitio en IIS para que actúe como un reverse proxy, redirigiendo las solicitudes a la instancia de Node.js que PM2 está gestionando (ej. `http://localhost:3000`). Esto se hace con el módulo Application Request Routing (ARR) de IIS.
-5.  **Variables de Entorno con PM2**: Puedes gestionar variables de entorno a través de un archivo de ecosistema de PM2 (`ecosystem.config.js`) o directamente al iniciar.
+## Notas de arquitectura y seguridad
 
-**Consideraciones Adicionales para Producción**:
+- Autenticación: Implementada con `bcryptjs`, sesiones en BD (tabla `sessions`) y cookie HttpOnly `session_token`. Middleware protege rutas y el layout valida sesión en la BD.
+- Revalidación: Acciones del servidor usan `revalidatePath` tras escrituras para refrescar UI.
+- Validación: Formularios validados con Zod y `react-hook-form`.
+- Imágenes remotas: Permitidas desde `placehold.co` en `next.config.ts`.
 
-*   **Seguridad**: Asegúrate de que tu servidor SQL Server y el servidor de la aplicación estén debidamente protegidos (firewalls, contraseñas seguras, actualizaciones regulares).
-*   **Variables de Entorno**: Utiliza variables de entorno en tu servidor para las configuraciones sensibles (como credenciales de BD). La lógica en `src/lib/db.ts` está preparada para priorizar estas.
-*   **HTTPS**: Configura HTTPS para tu aplicación en producción.
-*   **Logging**: Implementa un sistema de logging robusto para el backend y la aplicación.
-*   **Backups**: Realiza backups regulares de tu base de datos.
+## Roadmap (estado actual)
 
-Este `README.md` debería darte una buena hoja de ruta para poner en marcha la aplicación y conectarla a tu base de datos SQL Server.
+Hecho
+- SQL Server integrado (pool `mssql` en `src/lib/db.ts`).
+- CRUD completo: usuarios, vehículos, combustible, mantenimiento, adjuntos.
+- Autenticación/sesiones: cookie HttpOnly + validación en BD + middleware de acceso.
+- Reportes con agregaciones en servidor y filtros consistentes (vehículo + rango de fechas):
+    - Costos de mantenimiento
+    - Costos generales por vehículo
+    - Consumo de combustible
+    - Análisis de eficiencia
+    - Mantenimiento próximo (umbrales configurables)
+    - Informe comparativo (consolidado)
+- Exportar CSV e impresión en todos los reportes
+- UI en español y menú por roles (admin restringe configuración sensible)
+
+Pendiente
+- Gráficas avanzadas adicionales (series por tiempo, comparativos históricos)
+- Caching/optimización para reportes con grandes rangos
+- Tests (unitarios e integración) para acciones críticas
+
+Fuente única de tablas/esquema
+- `docs/sql/schema.sql` (no duplicar en otros documentos)
+
+Recomendaciones
+- Añadir presets adicionales de fechas por “trimestre” y “año fiscal” si aplica
+- Agregar auditoría (createdBy/updatedBy) en tablas clave
+- Añadir tareas programadas para recalcular métricas de largo plazo

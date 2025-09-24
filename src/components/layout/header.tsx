@@ -5,6 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Bell, UserCircle, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
+import { logoutUser } from "@/lib/actions/auth-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,12 +14,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// Removed: import { LanguageSelector } from "@/components/language-selector";
-// Removed: import { useTranslation } from "@/hooks/use-translation";
 
 
 export function Header() {
-  // Removed: const { t } = useTranslation();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6">
       <SidebarTrigger className="sm:hidden" />
@@ -26,7 +24,6 @@ export function Header() {
         {/* Optional: Breadcrumbs or Page Title can go here */}
       </div>
       <div className="flex items-center gap-2 md:gap-4">
-        {/* Removed: <LanguageSelector /> */}
         <Button variant="ghost" size="icon" className="rounded-full" aria-label="Notificaciones">
           <Bell className="h-5 w-5" />
           <span className="sr-only">Notificaciones</span>
@@ -47,10 +44,19 @@ export function Header() {
                 <span>Configuración</span>
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>
-              <LogOut className="mr-2 h-4 w-4" />
-              <span>Cerrar Sesión</span>
-            </DropdownMenuItem>
+            <form
+              action={async () => {
+                "use server";
+                await logoutUser();
+              }}
+            >
+              <DropdownMenuItem asChild>
+                <button type="submit" className="w-full flex items-center">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Cerrar Sesión</span>
+                </button>
+              </DropdownMenuItem>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

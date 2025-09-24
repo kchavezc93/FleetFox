@@ -3,7 +3,7 @@
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Settings as SettingsIcon, Palette, Database } from "lucide-react"; // Database icon
+import { Settings as SettingsIcon, Palette, Database, SlidersHorizontal } from "lucide-react"; // Database icon
 // Removed DbConnectionForm and related imports as DB config is now via .env
 import { ThemeSwitcher } from "@/components/theme-switcher";
 // Removed: import React, { useEffect, useState } from "react";
@@ -34,6 +34,7 @@ export default function SettingsPage() {
         icon={SettingsIcon}
       />
       <div className="grid gap-6">
+        <AlertThresholdsCard />
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5"/> Configuración de Conexión a Base de Datos</CardTitle>
@@ -64,5 +65,71 @@ export default function SettingsPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card as CardBase } from "@/components/ui/card";
+import { loadAlertThresholdsAction, saveAlertThresholdsAction } from "@/lib/actions/settings-actions";
+
+function AlertThresholdsCard() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ days: 30, km: 2000, lowEff: 10, highMaint: 20000, windowDays: 30 });
+  useEffect(() => { (async () => {
+    setLoading(true);
+    const s = await loadAlertThresholdsAction();
+    if (s) setForm({ days: s.daysThreshold ?? 30, km: s.mileageThreshold ?? 2000, lowEff: s.lowEfficiencyThresholdKmPerGallon ?? 10, highMaint: s.highMaintenanceCostThreshold ?? 20000, windowDays: s.maintenanceCostWindowDays ?? 30 });
+    setLoading(false);
+  })(); }, []);
+  async function save() {
+    setSaving(true);
+    await saveAlertThresholdsAction({
+      daysThreshold: Number(form.days),
+      mileageThreshold: Number(form.km),
+      lowEfficiencyThresholdKmPerGallon: Number(form.lowEff),
+      highMaintenanceCostThreshold: Number(form.highMaint),
+      maintenanceCostWindowDays: Number(form.windowDays),
+    });
+    setSaving(false);
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5"/> Umbrales de Alertas</CardTitle>
+        <CardDescription>Ajusta los umbrales usados por el motor de alertas.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-5">
+        {loading ? <p className="text-muted-foreground">Cargando...</p> : (
+          <>
+            <div>
+              <label className="block text-sm mb-1">Días (próximo mantenimiento)</label>
+              <Input type="number" value={form.days} onChange={e => setForm({ ...form, days: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-sm mb-1">Km (próximo mantenimiento)</label>
+              <Input type="number" value={form.km} onChange={e => setForm({ ...form, km: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-sm mb-1">Eficiencia baja (km/gal)</label>
+              <Input type="number" step="0.1" value={form.lowEff} onChange={e => setForm({ ...form, lowEff: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-sm mb-1">Costo alto (C$)</label>
+              <Input type="number" step="0.01" value={form.highMaint} onChange={e => setForm({ ...form, highMaint: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="block text-sm mb-1">Ventana días costos</label>
+              <Input type="number" value={form.windowDays} onChange={e => setForm({ ...form, windowDays: Number(e.target.value) })} />
+            </div>
+            <div className="md:col-span-5 flex justify-end">
+              <Button onClick={save} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

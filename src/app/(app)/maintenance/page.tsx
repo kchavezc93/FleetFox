@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
+import { requirePermission } from "@/lib/authz";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default async function MaintenancePage() {
+  await requirePermission('/maintenance');
   const logs = await getMaintenanceLogs();
 
   return (

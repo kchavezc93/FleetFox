@@ -5,8 +5,9 @@ import type { UserSchema } from "@/lib/zod-schemas";
 import type { UserProfile } from "@/types";
 import { getDbClient } from "@/lib/db";
 // import { revalidatePath } from "next/cache";
-// import sql from 'mssql';
-// import bcrypt from 'bcryptjs'; // npm install bcryptjs @types/bcryptjs
+import sql from 'mssql';
+import bcrypt from 'bcryptjs'; // npm install bcryptjs @types/bcryptjs
+import { recordAuditEvent } from '@/lib/actions/audit-actions';
 
 // PRODUCCIÓN: Consideraciones adicionales para la gestión de usuarios:
 // - Validación de permisos: Asegurar que el usuario que realiza la acción tenga los permisos necesarios.
@@ -39,29 +40,19 @@ export async function saveUser(data: UserSchema, existingId?: string): Promise<{
 
   // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', dbType: dbClient.type, email: data.email, existingId }, "Attempting to save user");
 
-  // --- EJEMPLO DE LÓGICA DE PRODUCCIÓN PARA SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-  /*
-  if (dbClient.type === "SQLServer" && dbClient.pool) {
-    const pool = dbClient.pool;
-    
+  if (dbClient.type === "SQLServer" && (dbClient as any).pool) {
+    const pool = (dbClient as any).pool as sql.ConnectionPool;
     try {
       let hashedPassword = "";
       if (data.password) {
-        // const salt = await bcrypt.genSalt(10); // Costo de hashing (usualmente 10-12)
-        // hashedPassword = await bcrypt.hash(data.password, salt);
-        // Para demostración, NO USAR EN PRODUCCIÓN:
-        hashedPassword = "hashed_" + data.password + "_example_NO_USAR_EN_PROD"; 
-        // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', email: data.email }, "Password provided, proceeding with hashing.");
+        const salt = await bcrypt.genSalt(10);
+        hashedPassword = await bcrypt.hash(data.password, salt);
       }
-      
-      // Guardar permisos como una cadena JSON. SQL Server tiene soporte JSON.
-      // Podrías usar NVARCHAR(MAX) para esta columna.
+
       const permissionsJson = JSON.stringify(data.permissions || []);
 
-      if (existingId) { // Actualizar usuario existente
-        // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', subAction: 'update', userId: existingId, email: data.email });
-        
-        // Verificar si el email o username ya existen para OTRO usuario
+      if (existingId) {
+        // Verificar duplicados para otro usuario
         const checkUpdateRequest = pool.request();
         checkUpdateRequest.input('checkEmail_upd', sql.NVarChar(255), data.email);
         checkUpdateRequest.input('checkUsername_upd', sql.NVarChar(100), data.username);
@@ -69,129 +60,119 @@ export async function saveUser(data: UserSchema, existingId?: string): Promise<{
         const checkUpdateResult = await checkUpdateRequest.query(
           'SELECT id, email, username FROM users WHERE (email = @checkEmail_upd OR username = @checkUsername_upd) AND id <> @currentId_upd'
         );
-        
         if (checkUpdateResult.recordset.length > 0) {
-            const errors: Record<string, string> = {};
-            if (checkUpdateResult.recordset.some(u => u.email === data.email)) errors.email = "Este correo electrónico ya está en uso por otro usuario.";
-            if (checkUpdateResult.recordset.some(u => u.username === data.username)) errors.username = "Este nombre de usuario ya está en uso por otro usuario.";
-            // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'saveUser', subAction: 'update', userId: existingId, reason: 'Duplicate email/username for other user' });
-            return { success: false, message: "El correo electrónico o nombre de usuario ya existe para otro usuario.", errors };
+          const errors: Record<string, string> = {};
+          if (checkUpdateResult.recordset.some((u: any) => u.email === data.email)) errors.email = "Este correo electrónico ya está en uso por otro usuario.";
+          if (checkUpdateResult.recordset.some((u: any) => u.username === data.username)) errors.username = "Este nombre de usuario ya está en uso por otro usuario.";
+          return { success: false, message: "El correo electrónico o nombre de usuario ya existe para otro usuario.", errors };
         }
 
-        const updateRequest = pool.request();
+  const updateRequest = pool.request();
         updateRequest.input('id_upd_val', sql.NVarChar(50), existingId);
         updateRequest.input('email_upd_val', sql.NVarChar(255), data.email);
         updateRequest.input('username_upd_val', sql.NVarChar(100), data.username);
-        updateRequest.input('fullName_upd_val', sql.NVarChar(255), data.fullName || null); // Permitir null para fullName
+        updateRequest.input('fullName_upd_val', sql.NVarChar(255), data.fullName || null);
         updateRequest.input('role_upd_val', sql.NVarChar(50), data.role);
         updateRequest.input('permissions_upd_val', sql.NVarChar(sql.MAX), permissionsJson);
+  updateRequest.input('active_upd_val', sql.Bit, data.active === undefined ? true : !!data.active);
 
-        let queryUpdate = \`
-          UPDATE users 
-          SET email = @email_upd_val, username = @username_upd_val, fullName = @fullName_upd_val, 
-              role = @role_upd_val, permissions = @permissions_upd_val, updatedAt = GETDATE()
-        \`;
-        if (hashedPassword) { // Solo actualizar hash si se proveyó nueva contraseña
-          queryUpdate += \`, passwordHash = @passwordHash_upd_val\`;
-          updateRequest.input('passwordHash_upd_val', sql.NVarChar(255), hashedPassword); // Ajustar longitud según hash bcrypt
+        if (hashedPassword) {
+          updateRequest.input('passwordHash_upd_val', sql.NVarChar(255), hashedPassword);
+          await updateRequest.query(`
+            UPDATE users
+            SET email = @email_upd_val,
+                username = @username_upd_val,
+                fullName = @fullName_upd_val,
+                role = @role_upd_val,
+                permissions = @permissions_upd_val,
+                passwordHash = @passwordHash_upd_val,
+                active = @active_upd_val,
+                updatedAt = GETDATE()
+            WHERE id = @id_upd_val;
+          `);
+          // Invalidate all existing sessions for this user after password change
+          const invalidateReq = pool.request();
+          invalidateReq.input('userId_invalidate', sql.NVarChar(50), existingId);
+          await invalidateReq.query('DELETE FROM sessions WHERE userId = @userId_invalidate');
+        } else {
+          await updateRequest.query(`
+            UPDATE users
+            SET email = @email_upd_val,
+                username = @username_upd_val,
+                fullName = @fullName_upd_val,
+                role = @role_upd_val,
+                permissions = @permissions_upd_val,
+                active = @active_upd_val,
+                updatedAt = GETDATE()
+            WHERE id = @id_upd_val;
+          `);
+          if (data.active === false) {
+            const invalidateReq = pool.request();
+            invalidateReq.input('userId_invalidate', sql.NVarChar(50), existingId);
+            await invalidateReq.query('DELETE FROM sessions WHERE userId = @userId_invalidate');
+          }
         }
-        queryUpdate += \` WHERE id = @id_upd_val;\`;
-        
-        await updateRequest.query(queryUpdate);
-        // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', subAction: 'update', userId: existingId, status: 'success' });
-        // revalidatePath("/users");
-        // revalidatePath(\`/users/\${existingId}\`); // Si tienes una página de perfil de usuario
-        return { success: true, message: \`Usuario \${data.email} actualizado exitosamente.\`, userId: existingId };
 
-      } else { // Crear nuevo usuario
-        // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', subAction: 'create', email: data.email });
-        
-        // Verificar si el email o username ya existen
+        // revalidatePath('/users');
+  try { await recordAuditEvent({ eventType: 'USER_UPDATED', targetUserId: existingId, message: `User ${data.email} updated` }); } catch {}
+  return { success: true, message: `Usuario ${data.email} actualizado exitosamente.`, userId: existingId };
+      } else {
+        // Crear nuevo usuario: verificar duplicados
         const checkCreateRequest = pool.request();
         checkCreateRequest.input('checkEmail_ins', sql.NVarChar(255), data.email);
         checkCreateRequest.input('checkUsername_ins', sql.NVarChar(100), data.username);
         const checkCreateResult = await checkCreateRequest.query(
-          'SELECT id FROM users WHERE email = @checkEmail_ins OR username = @checkUsername_ins'
+          'SELECT id, email, username FROM users WHERE email = @checkEmail_ins OR username = @checkUsername_ins'
         );
-
         if (checkCreateResult.recordset.length > 0) {
-            const errors: Record<string, string> = {};
-            if (checkCreateResult.recordset.some(u => u.email === data.email)) errors.email = "Este correo electrónico ya está en uso.";
-            if (checkCreateResult.recordset.some(u => u.username === data.username)) errors.username = "Este nombre de usuario ya está en uso.";
-            // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'saveUser', subAction: 'create', email: data.email, reason: 'Duplicate email/username' });
-            return { success: false, message: "El correo electrónico o nombre de usuario ya existe.", errors };
+          const errors: Record<string, string> = {};
+          if (checkCreateResult.recordset.some((u: any) => u.email === data.email)) errors.email = "Este correo electrónico ya está en uso.";
+          if (checkCreateResult.recordset.some((u: any) => u.username === data.username)) errors.username = "Este nombre de usuario ya está en uso.";
+          return { success: false, message: "El correo electrónico o nombre de usuario ya existe.", errors };
         }
 
         if (!hashedPassword) {
-            // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'saveUser', subAction: 'create', email: data.email, reason: 'Hashed password missing for new user' });
-            return { success: false, message: "Error interno: Intento de crear usuario sin contraseña hasheada."};
+          return { success: false, message: "Error interno: Intento de crear usuario sin contraseña hasheada." };
         }
 
-        const insertRequest = pool.request();
-        // ID: Generalmente autogenerado por la BD (IDENTITY o UNIQUEIDENTIFIER con NEWID()).
-        // Si usas GUID generado por la app:
-        // const newUserId = uuidv4(); // npm install uuid
-        // insertRequest.input('id_ins_val', sql.NVarChar(50), newUserId); 
+  const insertRequest = pool.request();
         insertRequest.input('email_ins_val', sql.NVarChar(255), data.email);
         insertRequest.input('username_ins_val', sql.NVarChar(100), data.username);
         insertRequest.input('fullName_ins_val', sql.NVarChar(255), data.fullName || null);
-        insertRequest.input('passwordHash_ins_val', sql.NVarChar(255), hashedPassword); // Ajustar longitud para bcrypt
-        insertRequest.input('role_ins_val', sql.NVarChar(50), data.role); // Ej: 'Standard' por defecto, luego el primer admin se actualiza manualmente.
+        insertRequest.input('passwordHash_ins_val', sql.NVarChar(255), hashedPassword);
+        insertRequest.input('role_ins_val', sql.NVarChar(50), data.role);
         insertRequest.input('permissions_ins_val', sql.NVarChar(sql.MAX), permissionsJson);
-        
-        // Nota sobre el primer usuario administrador:
-        // Generalmente, el primer usuario se crea con un rol estándar, y luego se
-        // actualiza manualmente en la base de datos a 'Admin'. O se usa un script de "seed"
-        // para crear el administrador inicial.
-        // Si 'role_ins_val' es 'Admin' aquí, asegúrate de que esto sea una acción controlada.
+  insertRequest.input('active_ins_val', sql.Bit, data.active === undefined ? true : !!data.active);
 
-        const resultInsert = await insertRequest.query(\`
-          INSERT INTO users (email, username, fullName, passwordHash, role, permissions, createdAt, updatedAt)
-          OUTPUT INSERTED.id -- Importante para obtener el ID generado por la BD si es IDENTITY
-          VALUES (@email_ins_val, @username_ins_val, @fullName_ins_val, @passwordHash_ins_val, @role_ins_val, @permissions_ins_val, GETDATE(), GETDATE());
-        \`);
-        
-        if (resultInsert.recordset.length === 0 || !resultInsert.recordset[0].id) {
-            // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'saveUser', subAction: 'create', email: data.email, reason: 'No ID returned from DB' });
-            throw new Error("Fallo al crear el usuario, la base de datos no devolvió un ID.");
+        const resultInsert = await insertRequest.query(`
+          INSERT INTO users (email, username, fullName, passwordHash, role, permissions, active, createdAt, updatedAt)
+          OUTPUT INSERTED.id
+          VALUES (@email_ins_val, @username_ins_val, @fullName_ins_val, @passwordHash_ins_val, @role_ins_val, @permissions_ins_val, @active_ins_val, GETDATE(), GETDATE());
+        `);
+        if (!resultInsert.recordset.length || !resultInsert.recordset[0].id) {
+          throw new Error('Fallo al crear el usuario, la base de datos no devolvió un ID.');
         }
         const newUserIdFromDb = resultInsert.recordset[0].id.toString();
-        // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'saveUser', subAction: 'create', newUserId: newUserIdFromDb, email: data.email, status: 'success' });
-        // revalidatePath("/users");
-        return { success: true, message: \`Usuario \${data.email} creado exitosamente.\`, userId: newUserIdFromDb };
+        // revalidatePath('/users');
+  try { await recordAuditEvent({ eventType: 'USER_CREATED', targetUserId: newUserIdFromDb, message: `User ${data.email} created` }); } catch {}
+  return { success: true, message: `Usuario ${data.email} creado exitosamente.`, userId: newUserIdFromDb };
       }
     } catch (error) {
-      // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'saveUser', email: data.email, existingId, error: (error as Error).message, stack: (error as Error).stack }, "Server error during user save");
-      console.error(\`[SQL Server Error] Error al guardar usuario \${data.email}:\`, error);
-      // Manejar errores específicos de BD, ej. violación de constraint UNIQUE para email/username
-      // if ((error as sql.MSSQLError).number === 2627 || (error as sql.MSSQLError).number === 2601) { 
-      //   return { success: false, message: "El correo electrónico o nombre de usuario ya existe.", errors: { form: "Conflicto de datos únicos." } };
-      // }
-      return { 
-        success: false, 
-        message: \`Error del servidor al procesar usuario. Detalles: \${(error as Error).message}\`,
-        errors: { form: "Error de base de datos." }
+      console.error(`[SQL Server Error] Error al guardar usuario ${data.email}:`, error);
+      return {
+        success: false,
+        message: `Error del servidor al procesar usuario. Detalles: ${(error as Error).message}`,
+        errors: { form: 'Error de base de datos.' }
       };
     }
   } else {
-    // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'saveUser', dbType: dbClient.type, reason: 'DB type not implemented or pool missing' });
-    console.warn(\`[Save User] La gestión de usuarios no está implementada para el tipo de BD: \${dbClient.type} o el pool de conexión no está disponible. Usuario no guardado.\`);
-    return { 
-        success: false, 
-        message: \`La gestión de usuarios no está implementada para el tipo de BD: \${dbClient.type} o falta el pool. Implemente la lógica SQL y la conexión.\`,
-        errors: { form: "Tipo de BD no soportado o error de conexión." }
+    console.warn(`[Save User] La gestión de usuarios no está implementada para el tipo de BD: ${dbClient.type} o falta el pool.`);
+    return {
+      success: false,
+      message: `La gestión de usuarios no está implementada para ${dbClient.type} o falta el pool.`,
+      errors: { form: 'Tipo de BD no soportado o error de conexión.' }
     };
   }
-  */
-  
-  // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-  const actionType = existingId ? 'actualizado' : 'creado';
-  console.log(`[Save User] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Usuario ${actionType} (simulado).`);
-  return { 
-    success: true, // Simulado
-    message: `Usuario ${data.email} ${actionType} (simulado). Implementación SQL pendiente para ${dbClient.type}.`,
-    userId: existingId || "simulated-new-user-id" 
-  };
 }
 
 export async function getUsers(): Promise<UserProfile[]> {
@@ -203,42 +184,34 @@ export async function getUsers(): Promise<UserProfile[]> {
     }
     // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'getUsers', dbType: dbClient.type }, "Attempting to fetch all users");
 
-    // --- EJEMPLO DE LÓGICA DE PRODUCCIÓN PARA SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-    /*
-    if (dbClient.type === "SQLServer" && dbClient.pool) {
-        const pool = dbClient.pool;
-        try {
-            const request = pool.request();
-            // NUNCA SE DEVUELVE passwordHash al listar usuarios
-            const result = await request.query(
-                'SELECT id, username, email, fullName, role, permissions, createdAt, updatedAt FROM users ORDER BY username ASC'
-            );
-            return result.recordset.map(row => ({
-                id: row.id.toString(),
-                username: row.username,
-                email: row.email,
-                fullName: row.fullName || "", // Asegurar que fullName no sea null si es opcional
-                passwordHash: "", // Importante: No exponer el hash
-                role: row.role as "Admin" | "Standard", // Hacer cast al tipo esperado
-                permissions: row.permissions ? JSON.parse(row.permissions) : [], // Parsear JSON de permisos
-                createdAt: new Date(row.createdAt).toISOString(),
-                updatedAt: new Date(row.updatedAt).toISOString(),
-            })) as UserProfile[];
-        } catch (error) {
-            // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'getUsers', error: (error as Error).message, stack: (error as Error).stack }, "Failed to fetch users");
-            console.error('[SQL Server Error] Error al obtener usuarios:', error);
-            return [];
-        }
-    } else {
-        // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'getUsers', dbType: dbClient.type, reason: 'DB type not implemented or pool missing' });
-        console.warn(\`[Get Users] La obtención de usuarios no está implementada para el tipo de BD: \${dbClient.type} o falta el pool. Devolviendo lista vacía.\`);
+    if (dbClient.type === "SQLServer" && (dbClient as any).pool) {
+      const pool = (dbClient as any).pool as sql.ConnectionPool;
+      try {
+        const request = pool.request();
+        // NUNCA devolver passwordHash al listar usuarios
+        const result = await request.query(
+          'SELECT id, username, email, fullName, role, permissions, active, createdAt, updatedAt FROM users ORDER BY username ASC'
+        );
+        return result.recordset.map(row => ({
+          id: row.id.toString(),
+          username: row.username,
+          email: row.email,
+          fullName: row.fullName || "",
+          passwordHash: "",
+          role: row.role as "Admin" | "Standard",
+          permissions: row.permissions ? JSON.parse(row.permissions) : [],
+          active: (row as any).active === true || (row as any).active === 1,
+          createdAt: new Date(row.createdAt).toISOString(),
+          updatedAt: new Date(row.updatedAt).toISOString(),
+        })) as any;
+      } catch (error) {
+        console.error('[SQL Server Error] Error al obtener usuarios:', error);
         return [];
+      }
+    } else {
+      console.warn(`[Get Users] La obtención de usuarios no está implementada para el tipo de BD: ${dbClient.type} o falta el pool. Devolviendo lista vacía.`);
+      return [];
     }
-    */
-    
-    // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-    console.log(`[Get Users] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
-    return [];
 }
 
 export async function deleteUser(id: string): Promise<{ success: boolean; message: string }> {
@@ -250,47 +223,75 @@ export async function deleteUser(id: string): Promise<{ success: boolean; messag
     }
     // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'deleteUser', dbType: dbClient.type, userId: id }, "Attempting to delete user");
 
-    // --- EJEMPLO DE LÓGICA DE PRODUCCIÓN PARA SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
-    /*
-    if (dbClient.type === "SQLServer" && dbClient.pool) {
-        const pool = dbClient.pool;
-        try {
-            // PRODUCCIÓN: Considerar "soft delete" (marcar como inactivo) en lugar de borrado físico,
-            // especialmente si hay referencias al usuario en otras tablas (ej. logs de auditoría).
-            // Para un borrado físico:
-            const request = pool.request();
-            request.input('idToDelete_usr', sql.NVarChar(50), id);
-            const result = await request.query('DELETE FROM users WHERE id = @idToDelete_usr;');
-            
-            if (result.rowsAffected[0] === 0) {
-                 // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'deleteUser', userId: id, reason: 'Not found for deletion' });
-                 return { success: false, message: \`Usuario ID: \${id} no encontrado para eliminar.\` };
-            }
-            // PRODUCCIÓN: logger.info({ module: 'user-actions', action: 'deleteUser', userId: id, status: 'success' });
-            // revalidatePath("/users");
-            return { success: true, message: \`Usuario ID: \${id} eliminado exitosamente.\` };
-        } catch (error) {
-            // PRODUCCIÓN: logger.error({ module: 'user-actions', action: 'deleteUser', userId: id, error: (error as Error).message, stack: (error as Error).stack }, "Failed to delete user");
-            console.error(\`[SQL Server Error] Error al eliminar usuario ${id}:\`, error);
-            // Podría fallar debido a foreign key constraints si el usuario está referenciado en otras tablas.
-            // En ese caso, se debería impedir la eliminación o usar "soft delete".
-            return { success: false, message: \`Error al eliminar usuario. Detalles: \${(error as Error).message}\` };
+    if (dbClient.type === "SQLServer" && (dbClient as any).pool) {
+      const pool = (dbClient as any).pool as sql.ConnectionPool;
+      const tx = new sql.Transaction(pool);
+      try {
+        await tx.begin();
+        // Delete sessions for the user first
+        const delSessionsReq = tx.request();
+        delSessionsReq.input('userId_del', sql.NVarChar(50), id);
+        await delSessionsReq.query('DELETE FROM sessions WHERE userId = @userId_del');
+
+        // Then delete the user
+        const delUserReq = tx.request();
+        delUserReq.input('idToDelete_usr', sql.NVarChar(50), id);
+        const result = await delUserReq.query('DELETE FROM users WHERE id = @idToDelete_usr;');
+
+        await tx.commit();
+
+        if (result.rowsAffected[0] === 0) {
+          return { success: false, message: `Usuario ID: ${id} no encontrado para eliminar.` };
         }
+        try { await recordAuditEvent({ eventType: 'USER_DELETED', targetUserId: id, message: `User deleted` }); } catch {}
+        return { success: true, message: `Usuario ID: ${id} eliminado exitosamente (sesiones invalidadas).` };
+      } catch (error) {
+        try { await tx.rollback(); } catch {}
+        console.error(`[SQL Server Error] Error al eliminar usuario ${id}:`, error);
+        return { success: false, message: `Error al eliminar usuario. Detalles: ${(error as Error).message}` };
+      }
     } else {
-        // PRODUCCIÓN: logger.warn({ module: 'user-actions', action: 'deleteUser', userId: id, dbType: dbClient.type, reason: 'DB type not implemented or pool missing' });
-        console.warn(\`[Delete User] La eliminación de usuarios no está implementada para el tipo de BD: \${dbClient.type} o falta el pool.\`);
-        return { 
-          success: false, 
-          message: \`La eliminación de usuarios no está implementada para \${dbClient.type} o falta el pool. Implemente la lógica SQL y la conexión.\` 
-        };
+      console.warn(`[Delete User] La eliminación de usuarios no está implementada para el tipo de BD: ${dbClient.type} o falta el pool.`);
+      return { 
+        success: false, 
+        message: `La eliminación de usuarios no está implementada para ${dbClient.type} o falta el pool. Implemente la lógica SQL y la conexión.` 
+      };
     }
-    */
-    
-    // Bloque de marcador de posición si la lógica SQL está comentada o no implementada
-    console.log(`[Delete User] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Usuario ID: ${id} no eliminado.`);
-    // revalidatePath("/users"); // Asumiendo que tienes una página que lista usuarios
-    return { 
-      success: true, // Simulado
-      message: \`Usuario ID: \${id} eliminado (simulado). Implementación SQL pendiente para \${dbClient.type}.\` 
-    };
+}
+
+export async function getUserById(id: string): Promise<UserProfile & { active: boolean } | null> {
+  const dbClient = await getDbClient();
+  if (!dbClient) {
+    console.error(`getUserById(${id}): Configuración de BD no encontrada.`);
+    return null;
+  }
+  if (dbClient.type === "SQLServer" && (dbClient as any).pool) {
+    const pool = (dbClient as any).pool as sql.ConnectionPool;
+    try {
+      const req = pool.request();
+      req.input('id_sel', sql.NVarChar(50), id);
+      const result = await req.query(
+        'SELECT id, username, email, fullName, role, permissions, active, createdAt, updatedAt FROM users WHERE id = @id_sel'
+      );
+      if (!result.recordset.length) return null;
+      const row = result.recordset[0];
+      return {
+        id: row.id.toString(),
+        username: row.username,
+        email: row.email,
+        fullName: row.fullName || "",
+        passwordHash: "",
+        role: row.role as "Admin" | "Standard",
+        permissions: row.permissions ? JSON.parse(row.permissions) : [],
+        active: (row as any).active === true || (row as any).active === 1,
+        createdAt: new Date(row.createdAt).toISOString(),
+        updatedAt: new Date(row.updatedAt).toISOString(),
+      } as any;
+    } catch (error) {
+      console.error(`[SQL Server Error] getUserById(${id})`, error);
+      return null;
+    }
+  }
+  console.warn(`[Get User By Id] No implementado para DB tipo: ${dbClient.type} o falta pool.`);
+  return null;
 }

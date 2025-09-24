@@ -19,12 +19,15 @@ import { LogIn, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { loginUser } from "@/lib/actions/auth-actions";
 import React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image"; 
 
 export default function LoginPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
   const companyLogoUrl = process.env.NEXT_PUBLIC_COMPANY_LOGO_URL;
 
@@ -45,9 +48,8 @@ export default function LoginPage() {
           title: "Inicio de Sesión Exitoso",
           description: result.message,
         });
-        // PRODUCCIÓN: Implementar redirección al dashboard y gestión de sesión
-        // Por ahora, el usuario NO es redirigido ni se crea una sesión.
-        // router.push("/dashboard");
+        const next = searchParams.get('next') || '/dashboard';
+        router.push(next);
       } else {
         toast({
           title: "Error de Inicio de Sesión",

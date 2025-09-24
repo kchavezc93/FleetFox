@@ -39,9 +39,11 @@ import React from "react";
 interface FuelingFormProps {
   vehicles: Vehicle[];
   onSubmitAction: (data: FuelingFormData) => Promise<{ message: string; errors?: any }>;
+  initial?: Partial<FuelingFormData> & { id?: string };
+  submitLabel?: string;
 }
 
-export function FuelingForm({ vehicles, onSubmitAction }: FuelingFormProps) {
+export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: FuelingFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -54,14 +56,14 @@ export function FuelingForm({ vehicles, onSubmitAction }: FuelingFormProps) {
   const form = useForm<FuelingLogSchema>({
     resolver: zodResolver(fuelingLogSchema),
     defaultValues: {
-      vehicleId: "",
-      fuelingDate: new Date(), 
-      mileageAtFueling: 0,
-      quantityLiters: 0, 
-      costPerLiter: 0, 
-      totalCost: 0,
-      station: "",
-      imageUrl: "",
+      vehicleId: initial?.vehicleId || "",
+      fuelingDate: initial?.fuelingDate ? (initial.fuelingDate instanceof Date ? initial.fuelingDate : new Date(initial.fuelingDate)) : new Date(), 
+      mileageAtFueling: initial?.mileageAtFueling ?? 0,
+      quantityLiters: initial?.quantityLiters ?? 0, 
+      costPerLiter: initial?.costPerLiter ?? 0, 
+      totalCost: initial?.totalCost ?? 0,
+      station: initial?.station || "",
+      imageUrl: initial?.imageUrl || "",
     },
   });
 
@@ -273,7 +275,7 @@ export function FuelingForm({ vehicles, onSubmitAction }: FuelingFormProps) {
             ) : (
               <Save className="mr-2 h-4 w-4" />
             )}
-            Registrar Carga
+            {submitLabel || (initial ? "Guardar Cambios" : "Registrar Carga")}
           </Button>
         </div>
       </form>

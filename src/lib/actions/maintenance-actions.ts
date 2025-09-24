@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from 'next/navigation';
 import { getDbClient } from "@/lib/db";
 import sql from 'mssql'; // Descomentar si se instala y usa 'mssql': npm install mssql
+import { getCurrentUser } from "@/lib/auth/session";
 
 // PRODUCCIÓN: Consideraciones Generales para Acciones del Servidor en Producción:
 // 1. Logging Estructurado: Reemplazar `console.log/warn/error` con un logger estructurado.
@@ -53,6 +54,8 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
     
     const transaction = new sql.Transaction(pool);
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       await transaction.begin(); 
 
       // Obtener plateNumber del vehículo para denormalización (opcional, pero simplifica listados)
@@ -86,13 +89,13 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
         INSERT INTO maintenance_logs (
           vehicleId, vehiclePlateNumber, maintenanceType, executionDate, mileageAtService, 
           activitiesPerformed, cost, provider, nextMaintenanceDateScheduled, 
-          nextMaintenanceMileageScheduled, createdAt, updatedAt
+          nextMaintenanceMileageScheduled, createdByUserId, updatedByUserId, createdAt, updatedAt
         )
         OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt
         VALUES (
           @ml_vehicleId, @ml_vehiclePlateNumber, @ml_maintenanceType, @ml_executionDate, @ml_mileageAtService,
           @ml_activitiesPerformed, @ml_cost, @ml_provider, @ml_nextMaintenanceDateScheduled,
-          @ml_nextMaintenanceMileageScheduled, GETDATE(), GETDATE()
+          @ml_nextMaintenanceMileageScheduled, ${userIdInt !== null ? userIdInt : 'NULL'}, ${userIdInt !== null ? userIdInt : 'NULL'}, GETDATE(), GETDATE()
         );
       `);
         
@@ -142,6 +145,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           currentMileage = @upd_v_currentMileage, 
           nextPreventiveMaintenanceDate = @upd_v_nextMaintDate, 
           nextPreventiveMaintenanceMileage = @upd_v_nextMaintMileage,
+          updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
           updatedAt = GETDATE()
         WHERE id = @upd_v_id;
       `);
@@ -259,6 +263,8 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
     
     const transaction = new sql.Transaction(pool);
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       await transaction.begin();
 
       // Obtener el vehicleId del log existente para actualizar el vehículo después
@@ -296,6 +302,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
           provider = @ml_provider, 
           nextMaintenanceDateScheduled = @ml_nextMaintenanceDateScheduled, 
           nextMaintenanceMileageScheduled = @ml_nextMaintenanceMileageScheduled,
+          updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
           updatedAt = GETDATE()
         OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt 
         WHERE id = @ml_id;
@@ -357,6 +364,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
           currentMileage = @upd_v_currentMileage, 
           nextPreventiveMaintenanceDate = @upd_v_nextMaintDate, 
           nextPreventiveMaintenanceMileage = @upd_v_nextMaintMileage,
+          updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
           updatedAt = GETDATE()
         WHERE id = @upd_v_id;
       `);
@@ -598,11 +606,16 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
       logRequest.input('logIdToFind', sql.NVarChar(50), id);
       const logResult = await logRequest.query(`
         SELECT 
-          id, vehicleId, vehiclePlateNumber, maintenanceType, executionDate, mileageAtService,
-          activitiesPerformed, cost, provider, nextMaintenanceDateScheduled,
-          nextMaintenanceMileageScheduled, createdAt, updatedAt
-        FROM maintenance_logs 
-        WHERE id = @logIdToFind
+          ml.id, ml.vehicleId, ml.vehiclePlateNumber, ml.maintenanceType, ml.executionDate, ml.mileageAtService,
+          ml.activitiesPerformed, ml.cost, ml.provider, ml.nextMaintenanceDateScheduled,
+          ml.nextMaintenanceMileageScheduled, ml.createdAt, ml.updatedAt,
+          ml.createdByUserId, ml.updatedByUserId,
+          cu.username AS createdByUsername,
+          uu.username AS updatedByUsername
+        FROM maintenance_logs ml
+        LEFT JOIN users cu ON ml.createdByUserId = cu.id
+        LEFT JOIN users uu ON ml.updatedByUserId = uu.id
+        WHERE ml.id = @logIdToFind
       `);
       
       if (logResult.recordset.length === 0) {
@@ -651,8 +664,12 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
         nextMaintenanceDateScheduled: rowLog.nextMaintenanceDateScheduled ? new Date(rowLog.nextMaintenanceDateScheduled).toISOString().split('T')[0] : "",
         nextMaintenanceMileageScheduled: rowLog.nextMaintenanceMileageScheduled,
         createdAt: new Date(rowLog.createdAt).toISOString(),
-        // updatedAt: new Date(rowLog.updatedAt).toISOString(), // Descomentar si se usa y se devuelve
-        attachments: attachments
+        updatedAt: rowLog.updatedAt ? new Date(rowLog.updatedAt).toISOString() : undefined,
+        attachments: attachments,
+        createdByUserId: rowLog.createdByUserId ? rowLog.createdByUserId.toString() : undefined,
+        updatedByUserId: rowLog.updatedByUserId ? rowLog.updatedByUserId.toString() : undefined,
+        createdByUsername: rowLog.createdByUsername || undefined,
+        updatedByUsername: rowLog.updatedByUsername || undefined
       } as MaintenanceLog;
 
     } catch (error) {

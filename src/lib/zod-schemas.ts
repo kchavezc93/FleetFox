@@ -79,6 +79,7 @@ export const userSchema = z.object({
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional(),
   role: z.enum(["Admin", "Standard"]),
   permissions: z.array(z.string()).default([]),
+  active: z.coerce.boolean().default(true),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });

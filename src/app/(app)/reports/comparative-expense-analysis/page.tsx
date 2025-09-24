@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChartHorizontalBig, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
-import type { FuelingLog, MaintenanceLog, Vehicle } from "@/types";
+import type { Vehicle } from "@/types";
 import {
   Table,
   TableBody,
@@ -21,44 +21,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
-import { getFuelingLogs } from "@/lib/actions/fueling-actions";
-import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
+import { getComparativeExpenseSummary } from "@/lib/actions/report-actions";
+import type { ComparativeExpenseSummary } from "@/lib/actions/report-actions";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
-import { format, startOfMonth, endOfMonth, parseISO, isWithinInterval, subMonths } from "date-fns";
+import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { exportToXLSX, exportMultipleSheetsToXLSX } from "@/lib/export-excel";
 
-const LITERS_PER_GALLON = 3.78541;
-
-interface ComparativeData {
-  totalMaintenanceCost: number;
-  totalFuelingCost: number;
-  totalOverallCost: number;
-  totalGallonsConsumed: number;
-  maintenanceLogCount: number;
-  fuelingLogCount: number;
-  kmDrivenInPeriod: number | null;
-  costPerKm: number | null;
-  avgFuelEfficiency: number | null;
-  vehicleBreakdown: Array<{
-    vehicleId: string;
-    plateNumber: string;
-    brandModel: string;
-    maintenanceCost: number;
-    fuelingCost: number;
-    totalCost: number;
-    kmDriven: number | null;
-  }>;
-}
+//
 
 export default function ComparativeExpenseAnalysisPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [maintenanceLogs, setMaintenanceLogs] = useState<MaintenanceLog[]>([]);
-  const [fuelingLogs, setFuelingLogs] = useState<FuelingLog[]>([]);
+  const [summary, setSummary] = useState<ComparativeExpenseSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
@@ -71,109 +53,111 @@ export default function ComparativeExpenseAnalysisPage() {
     };
   });
 
+  const applyPreset = (preset: string) => {
+    const today = new Date();
+    let from = today;
+    let to = today;
+    switch (preset) {
+      case "last7":
+        from = subDays(today, 6);
+        break;
+      case "last30":
+        from = subDays(today, 29);
+        break;
+      case "last90":
+        from = subDays(today, 89);
+        break;
+      case "thisMonth":
+        from = startOfMonth(today);
+        to = endOfMonth(today);
+        break;
+      case "lastMonth": {
+        const prev = subMonths(today, 1);
+        from = startOfMonth(prev);
+        to = endOfMonth(prev);
+        break;
+      }
+      case "ytd":
+        from = startOfYear(today);
+        break;
+    }
+    setDateRange({ from, to });
+  };
+
   useEffect(() => {
-    async function loadInitialData() {
+    async function loadData() {
       setIsLoading(true);
       try {
-        const [vehiclesData, maintenanceLogsData, fuelingLogsData] = await Promise.all([
-          getVehicles(),
-          getMaintenanceLogs(),
-          getFuelingLogs(),
-        ]);
-        setVehicles(vehiclesData);
-        setMaintenanceLogs(maintenanceLogsData);
-        setFuelingLogs(fuelingLogsData);
+        if (vehicles.length === 0) {
+          const v = await getVehicles();
+          setVehicles(v);
+        }
+        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
+        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
+        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
+        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
+        const s = await getComparativeExpenseSummary(params);
+        setSummary(s);
       } catch (error) {
-        console.error("Error loading report data:", error);
-        // Consider setting an error state here
+        console.error("Error loading comparative summary:", error);
+        setSummary(null);
       } finally {
         setIsLoading(false);
       }
     }
-    loadInitialData();
-  }, []);
+    loadData();
+  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
 
-  const comparativeData = useMemo((): ComparativeData => {
-    let filteredMaintenanceLogs = maintenanceLogs;
-    let filteredFuelingLogs = fuelingLogs;
+  const comparativeData = useMemo(() => {
+    const base: ComparativeExpenseSummary = summary ?? {
+      totalMaintenanceCost: 0,
+      totalFuelingCost: 0,
+      totalOverallCost: 0,
+      totalGallonsConsumed: 0,
+      maintenanceLogCount: 0,
+      fuelingLogCount: 0,
+      kmDrivenInPeriod: null,
+      costPerKm: null,
+      avgFuelEfficiency: null,
+      vehicleBreakdown: [],
+    };
 
-    // Filter by Date Range
-    if (dateRange?.from && dateRange?.to) {
-      const interval = { start: dateRange.from, end: dateRange.to };
-      filteredMaintenanceLogs = filteredMaintenanceLogs.filter(log => isWithinInterval(parseISO(log.executionDate + "T00:00:00"), interval));
-      filteredFuelingLogs = filteredFuelingLogs.filter(log => isWithinInterval(parseISO(log.fuelingDate + "T00:00:00"), interval));
-    }
+    if (selectedExpenseType === "all") return base;
 
-    // Filter by Vehicle
-    if (selectedVehicleId !== "all") {
-      filteredMaintenanceLogs = filteredMaintenanceLogs.filter(log => log.vehicleId === selectedVehicleId);
-      filteredFuelingLogs = filteredFuelingLogs.filter(log => log.vehicleId === selectedVehicleId);
-    }
+    // Recalcular métricas según tipo seleccionado usando breakdown
+    const filteredBreakdown = base.vehicleBreakdown.map(v => ({
+      ...v,
+      maintenanceCost: selectedExpenseType === "fueling" ? 0 : v.maintenanceCost,
+      fuelingCost: selectedExpenseType === "maintenance" ? 0 : v.fuelingCost,
+      totalCost: selectedExpenseType === "maintenance" ? v.maintenanceCost : selectedExpenseType === "fueling" ? v.fuelingCost : v.totalCost,
+    }));
 
-    // Filter by Expense Type
-    if (selectedExpenseType === "maintenance") {
-      filteredFuelingLogs = [];
-    } else if (selectedExpenseType === "fueling") {
-      filteredMaintenanceLogs = [];
-    }
-    
-    const targetVehicles = selectedVehicleId === "all" ? vehicles : vehicles.filter(v => v.id === selectedVehicleId);
-
-    const vehicleBreakdown = targetVehicles.map(vehicle => {
-      const vehicleMaintLogs = filteredMaintenanceLogs.filter(log => log.vehicleId === vehicle.id);
-      const vehicleFuelLogs = filteredFuelingLogs.filter(log => log.vehicleId === vehicle.id);
-      
-      const maintenanceCost = vehicleMaintLogs.reduce((sum, log) => sum + log.cost, 0);
-      const fuelingCost = vehicleFuelLogs.reduce((sum, log) => sum + log.totalCost, 0);
-
-      // Calculate km driven for this vehicle in period
-      let kmDrivenThisVehicle: number | null = null;
-      const allLogsForKm = [...vehicleMaintLogs.map(l => ({date: l.executionDate, mileage: l.mileageAtService})), ...vehicleFuelLogs.map(l => ({date: l.fuelingDate, mileage: l.mileageAtFueling}))]
-        .filter(l => l.mileage != null)
-        .sort((a,b) => new Date(a.date + "T00:00:00").getTime() - new Date(b.date + "T00:00:00").getTime() || a.mileage - b.mileage);
-
-      if(allLogsForKm.length >= 2) {
-        kmDrivenThisVehicle = allLogsForKm[allLogsForKm.length -1].mileage - allLogsForKm[0].mileage;
-      } else if (allLogsForKm.length === 1 && vehicle.currentMileage) {
-        // Fallback: if only one log in period, try to estimate based on vehicle's current mileage IF it makes sense
-        // This is a rough estimation and might not be accurate for past periods.
-        // For more accuracy, you'd need mileage at the start/end of the period from the vehicle entity or more logs.
-        // kmDrivenThisVehicle = vehicle.currentMileage - allLogsForKm[0].mileage; 
-        // Disabling this rough estimation for now as it can be misleading.
-      }
-
-
-      return {
-        vehicleId: vehicle.id,
-        plateNumber: vehicle.plateNumber,
-        brandModel: `${vehicle.brand} ${vehicle.model}`,
-        maintenanceCost,
-        fuelingCost,
-        totalCost: maintenanceCost + fuelingCost,
-        kmDriven: kmDrivenThisVehicle,
-      };
-    });
-
-    const totalMaintenanceCost = vehicleBreakdown.reduce((sum, v) => sum + v.maintenanceCost, 0);
-    const totalFuelingCost = vehicleBreakdown.reduce((sum, v) => sum + v.fuelingCost, 0);
+    const totalMaintenanceCost = filteredBreakdown.reduce((s, v) => s + v.maintenanceCost, 0);
+    const totalFuelingCost = filteredBreakdown.reduce((s, v) => s + v.fuelingCost, 0);
     const totalOverallCost = totalMaintenanceCost + totalFuelingCost;
-    const totalGallonsConsumed = filteredFuelingLogs.reduce((sum, log) => sum + (log.quantityLiters / LITERS_PER_GALLON), 0);
-    const kmDrivenInPeriod = vehicleBreakdown.reduce((sum, v) => sum + (v.kmDriven || 0), 0) || null;
+    const kmDrivenInPeriod = base.kmDrivenInPeriod;
 
+    // Ajustes de galones y eficiencia para "solo mantenimiento"
+    const totalGallonsConsumed = selectedExpenseType === "maintenance" ? 0 : base.totalGallonsConsumed;
+    const maintenanceLogCount = selectedExpenseType === "fueling" ? 0 : base.maintenanceLogCount;
+    const fuelingLogCount = selectedExpenseType === "maintenance" ? 0 : base.fuelingLogCount;
+
+    const costPerKm = kmDrivenInPeriod && totalOverallCost > 0 ? totalOverallCost / kmDrivenInPeriod : null;
+    const avgFuelEfficiency = kmDrivenInPeriod && totalGallonsConsumed > 0 ? kmDrivenInPeriod / totalGallonsConsumed : null;
 
     return {
       totalMaintenanceCost,
       totalFuelingCost,
       totalOverallCost,
       totalGallonsConsumed,
-      maintenanceLogCount: filteredMaintenanceLogs.length,
-      fuelingLogCount: filteredFuelingLogs.length,
+      maintenanceLogCount,
+      fuelingLogCount,
       kmDrivenInPeriod,
-      costPerKm: kmDrivenInPeriod && totalOverallCost > 0 ? totalOverallCost / kmDrivenInPeriod : null,
-      avgFuelEfficiency: kmDrivenInPeriod && totalGallonsConsumed > 0 ? kmDrivenInPeriod / totalGallonsConsumed : null,
-      vehicleBreakdown,
-    };
-  }, [vehicles, maintenanceLogs, fuelingLogs, selectedVehicleId, selectedExpenseType, dateRange]);
+      costPerKm,
+      avgFuelEfficiency,
+      vehicleBreakdown: filteredBreakdown,
+    } as ComparativeExpenseSummary;
+  }, [summary, selectedExpenseType]);
 
   const handlePrint = () => window.print();
 
@@ -238,6 +222,33 @@ export default function ComparativeExpenseAnalysisPage() {
       document.body.removeChild(link);
     }
   };
+
+  const handleExportXLSX = async () => {
+    if (!comparativeData) return;
+    const summaryRows = [
+      { Metrica: "Costo Total Mantenimiento (C$)", Valor: Number(comparativeData.totalMaintenanceCost.toFixed(2)) },
+      { Metrica: "Costo Total Combustible (C$)", Valor: Number(comparativeData.totalFuelingCost.toFixed(2)) },
+      { Metrica: "Costo Total General (C$)", Valor: Number(comparativeData.totalOverallCost.toFixed(2)) },
+      { Metrica: "Galones Totales Consumidos", Valor: Number(comparativeData.totalGallonsConsumed.toFixed(2)) },
+      { Metrica: "Kilómetros Recorridos", Valor: comparativeData.kmDrivenInPeriod ?? null },
+      { Metrica: "Costo por Km (C$)", Valor: comparativeData.costPerKm != null ? Number(comparativeData.costPerKm.toFixed(2)) : null },
+      { Metrica: "Eficiencia Prom. (km/gal)", Valor: comparativeData.avgFuelEfficiency != null ? Number(comparativeData.avgFuelEfficiency.toFixed(1)) : null },
+      { Metrica: "Num. Registros Mantenimiento", Valor: comparativeData.maintenanceLogCount },
+      { Metrica: "Num. Registros Combustible", Valor: comparativeData.fuelingLogCount },
+    ];
+    const breakdownRows = comparativeData.vehicleBreakdown.map(v => ({
+      Matrícula: v.plateNumber,
+      "Marca y Modelo": v.brandModel,
+      "Costo Mantenimiento (C$)": Number(v.maintenanceCost.toFixed(2)),
+      "Costo Combustible (C$)": Number(v.fuelingCost.toFixed(2)),
+      "Costo Total (C$)": Number(v.totalCost.toFixed(2)),
+      "Km Recorridos": v.kmDriven ?? null,
+    }));
+    await exportMultipleSheetsToXLSX([
+      { sheetName: "Resumen", rows: summaryRows },
+      { sheetName: "Desglose", rows: breakdownRows },
+    ], "informe_comparativo_gastos");
+  };
   
   const selectedVehicleInfo = selectedVehicleId !== "all" ? vehicles.find(v => v.id === selectedVehicleId) : null;
 
@@ -252,9 +263,14 @@ export default function ComparativeExpenseAnalysisPage() {
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleExportCSV} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
+                <FileDown className="mr-2 h-4 w-4" /> CSV
+              </Button>
+              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
+                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+              </Button>
+            </div>
           </div>
         }
       />
@@ -318,6 +334,19 @@ export default function ComparativeExpenseAnalysisPage() {
                 />
               </PopoverContent>
             </Popover>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">Rangos rápidos</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </CardContent>
       </Card>
@@ -332,7 +361,7 @@ export default function ComparativeExpenseAnalysisPage() {
           <CardDescription>
             Costos consolidados según los filtros aplicados.
             {isLoading && " Cargando datos..."}
-            {!isLoading && !maintenanceLogs.length && !fuelingLogs.length && " No hay datos para los filtros seleccionados o la BD no está conectada."}
+            {!isLoading && comparativeData.vehicleBreakdown.length === 0 && " No hay datos para los filtros seleccionados o la BD no está conectada."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -413,20 +442,27 @@ export default function ComparativeExpenseAnalysisPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Gráfico Comparativo (Marcador de posición)</CardTitle>
-          <CardDescription>Visualización de los gastos. Funcionalidad de gráficos pendiente de implementación con BD.</CardDescription>
+          <CardTitle>Gráfico Comparativo</CardTitle>
+          <CardDescription>Visualización resumida de costos por vehículo según filtros.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-64 bg-muted rounded-md flex items-center justify-center">
-            <Image 
-              src="https://placehold.co/800x300.png" 
-              alt="Marcador de Posición de Gráfico Comparativo" 
-              width={800} 
-              height={300}
-              data-ai-hint="comparison chart costs"
-              className="rounded-md"
-            />
-          </div>
+          <ChartContainer
+            config={{
+              fuel: { label: "Combustible", color: "#22c55e" },
+              maint: { label: "Mantenimiento", color: "#f59e0b" },
+            }}
+            className="h-64"
+          >
+            <BarChart data={comparativeData.vehicleBreakdown.map(v => ({ label: v.plateNumber, fuel: v.fuelingCost, maint: v.maintenanceCost }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="fuel" stackId="cost" fill="var(--color-fuel)" />
+              <Bar dataKey="maint" stackId="cost" fill="var(--color-maint)" />
+            </BarChart>
+          </ChartContainer>
         </CardContent>
       </Card>
     </>

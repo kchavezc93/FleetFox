@@ -13,13 +13,7 @@ import type { Alert as AlertType, MaintenanceLog, FuelingLog } from "@/types";
 import { getVehicles, getUpcomingMaintenanceCount } from "@/lib/actions/vehicle-actions"; // Añadido getUpcomingMaintenanceCount
 import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
 import { getFuelingLogs } from "@/lib/actions/fueling-actions";
-// PRODUCCIÓN: Para Alertas Recientes, necesitarás implementar:
-// 1. Una tabla 'alerts' en tu base de datos.
-// 2. Un archivo 'src/lib/actions/alert-actions.ts' con funciones como:
-//    - getRecentAlerts(): Que obtenga las N alertas más recientes (ej. las últimas 5 no resueltas).
-//    - createAlert(...): Para generar alertas (ej. cuando un mantenimiento está próximo).
-//    - updateAlertStatus(...): Para marcar alertas como vistas o resueltas.
-// import { getRecentAlerts } from "@/lib/actions/alert-actions"; // Descomentar cuando esté implementado
+import { getRecentAlerts } from "@/lib/actions/alert-actions";
 
 
 const getSpanishAlertType = (alertType: string): string => {
@@ -89,10 +83,8 @@ export default function DashboardPage() {
           .reduce((sum, log) => sum + log.totalCost, 0);
         setCurrentMonthFuelingCost(monthlyFuelingCost);
 
-        // PRODUCCIÓN: Descomentar y usar cuando getRecentAlerts esté implementado
-        // const alertsData = await getRecentAlerts(); // Esta función debe ser creada en alert-actions.ts
-        // setRecentAlerts(alertsData);
-        setRecentAlerts([]); // Mantener vacío hasta que la lógica de BD para alertas esté implementada
+  const alertsData = await getRecentAlerts();
+  setRecentAlerts(alertsData);
 
       } catch (error) {
         console.error("Falla al cargar datos para el dashboard:", error);
@@ -162,10 +154,9 @@ export default function DashboardPage() {
                 <Bell className="h-5 w-5 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {/* PRODUCCIÓN: Este valor vendrá de `getRecentAlerts().filter(a => a.status === "Nueva").length` */}
                 <div className="text-2xl font-bold">{recentAlerts.filter(a => a.status === "Nueva").length}</div>
                 <p className="text-xs text-muted-foreground">
-                 Nuevas alertas que requieren atención (Lógica pendiente en alert-actions.ts)
+                 Nuevas alertas que requieren atención
                 </p>
               </CardContent>
             </Card>
@@ -207,7 +198,6 @@ export default function DashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3 max-h-96 overflow-y-auto">
-                {/* PRODUCCIÓN: El contenido se llenará con los datos de `recentAlerts` */}
                 {recentAlerts.length > 0 ? recentAlerts.slice(0, 5).map(alert => (
                   <AlertUI key={alert.id} variant={alert.severity === "High" ? "destructive" : "default"} className="border-l-4" style={alert.severity === "High" ? {borderColor: "hsl(var(--destructive))"} : alert.severity === "Medium" ? {borderColor: "hsl(var(--accent))"} : {borderColor: "hsl(var(--muted))"}}>
                     <AlertTriangle className="h-4 w-4" />

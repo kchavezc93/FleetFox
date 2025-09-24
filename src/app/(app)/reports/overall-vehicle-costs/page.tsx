@@ -1,11 +1,19 @@
 
-"use client"; // This page will need client-side interaction for filters and potentially charts
+"use client"; // Client for interactions; aggregation is server-side
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { DateRange } from "react-day-picker";
+import { es } from "date-fns/locale";
+import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
 import { DollarSign, FileDown, Filter, CalendarDays, ListChecks, Printer } from "lucide-react";
-import type { FuelingLog, MaintenanceLog, Vehicle } from "@/types";
+import { exportToXLSX } from "@/lib/export-excel";
+import type { OverallVehicleCostSummary } from "@/lib/actions/report-actions";
 import {
   Table,
   TableBody,
@@ -16,61 +24,68 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { getFuelingLogs } from "@/lib/actions/fueling-actions";
-import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
+import { getOverallVehicleCostsSummary } from "@/lib/actions/report-actions";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
-
-type VehicleOverallCostSummary = {
-  vehicleId: string;
-  plateNumber: string;
-  brandModel: string;
-  totalFuelingCost: number;
-  fuelingLogCount: number; 
-  totalMaintenanceCost: number;
-  maintenanceLogCount: number; 
-  grandTotalCost: number;
-};
+import type { Vehicle } from "@/types";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
 export default function OverallVehicleCostsReportPage() {
-  const [summaries, setSummaries] = useState<VehicleOverallCostSummary[]>([]);
+  const [summaries, setSummaries] = useState<OverallVehicleCostSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const today = new Date();
+    return { from: startOfMonth(today), to: endOfMonth(today) };
+  });
+
+  const applyPreset = (preset: string) => {
+    const today = new Date();
+    let from = today;
+    let to = today;
+    switch (preset) {
+      case "last7":
+        from = subDays(today, 6);
+        break;
+      case "last30":
+        from = subDays(today, 29);
+        break;
+      case "last90":
+        from = subDays(today, 89);
+        break;
+      case "thisMonth":
+        from = startOfMonth(today);
+        to = endOfMonth(today);
+        break;
+      case "lastMonth": {
+        const prev = subMonths(today, 1);
+        from = startOfMonth(prev);
+        to = endOfMonth(prev);
+        break;
+      }
+      case "ytd":
+        from = startOfYear(today);
+        break;
+    }
+    setDateRange({ from, to });
+  };
 
   useEffect(() => {
     async function loadReportData() {
       setIsLoading(true);
       try {
-        const vehiclesData = await getVehicles();
-        const fuelingLogsData = await getFuelingLogs();
-        const maintenanceLogsData = await getMaintenanceLogs();
-
-        if (!vehiclesData || vehiclesData.length === 0) {
-          setSummaries([]);
-          setIsLoading(false);
-          return;
+        if (vehicles.length === 0) {
+          const v = await getVehicles();
+          setVehicles(v);
         }
-
-        const processedSummaries: VehicleOverallCostSummary[] = vehiclesData.map(vehicle => {
-          const vehicleFuelingLogs = fuelingLogsData.filter(log => log.vehicleId === vehicle.id);
-          const totalFuelingCost = vehicleFuelingLogs.reduce((sum, log) => sum + log.totalCost, 0);
-
-          const vehicleMaintenanceLogs = maintenanceLogsData.filter(log => log.vehicleId === vehicle.id);
-          const totalMaintenanceCost = vehicleMaintenanceLogs.reduce((sum, log) => sum + log.cost, 0);
-          
-          const grandTotalCost = totalFuelingCost + totalMaintenanceCost;
-          
-          return {
-            vehicleId: vehicle.id,
-            plateNumber: vehicle.plateNumber,
-            brandModel: `${vehicle.brand} ${vehicle.model}`,
-            totalFuelingCost,
-            fuelingLogCount: vehicleFuelingLogs.length, 
-            totalMaintenanceCost,
-            maintenanceLogCount: vehicleMaintenanceLogs.length, 
-            grandTotalCost
-          };
-        }).filter(summary => summary.fuelingLogCount > 0 || summary.maintenanceLogCount > 0); 
-        
-        setSummaries(processedSummaries);
+        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
+        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
+        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
+        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
+        const data = await getOverallVehicleCostsSummary(params);
+        const filtered = data.filter(s => s.fuelingLogCount > 0 || s.maintenanceLogCount > 0);
+        setSummaries(filtered);
       } catch (error) {
         console.error("Error loading overall vehicle costs report data:", error);
         setSummaries([]);
@@ -79,7 +94,7 @@ export default function OverallVehicleCostsReportPage() {
       }
     }
     loadReportData();
-  }, []);
+  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
 
   const handlePrint = () => {
     window.print();
@@ -113,6 +128,27 @@ export default function OverallVehicleCostsReportPage() {
     }
   };
 
+  const handleExportXLSX = async () => {
+    if (summaries.length === 0) return;
+    const rows = summaries.map(s => ({
+      plate: s.plateNumber,
+      brandModel: s.brandModel,
+      fuelCost: Number(s.totalFuelingCost.toFixed(2)),
+      maintCost: Number(s.totalMaintenanceCost.toFixed(2)),
+      totalCost: Number(s.grandTotalCost.toFixed(2)),
+    }));
+    await exportToXLSX({
+      rows,
+      columns: [
+        { key: "plate", header: "Vehículo (Matrícula)", width: 18 },
+        { key: "brandModel", header: "Marca y Modelo", width: 28 },
+        { key: "fuelCost", header: "Costo Combustible (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "maintCost", header: "Costo Mantenimiento (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+        { key: "totalCost", header: "Costo Total General (C$)", format: "currency", numFmt: "[$C$] #,##0.00" },
+      ],
+    }, "informe_costos_generales", "Costos");
+  };
+
   return (
     <>
       <PageHeader
@@ -121,18 +157,63 @@ export default function OverallVehicleCostsReportPage() {
         icon={ListChecks}
         actions={
           <div className="page-header-actions flex items-center gap-2">
-            <Button variant="outline" disabled>
-              <CalendarDays className="mr-2 h-4 w-4" /> Rango de Fechas
-            </Button>
-            <Button variant="outline" disabled>
-              <Filter className="mr-2 h-4 w-4" /> Filtros
-            </Button>
+            <div className="hidden md:flex items-center gap-2">
+              <div className="min-w-[220px]">
+                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar vehículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los vehículos</SelectItem>
+                    {vehicles.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    defaultMonth={dateRange?.from}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">Rangos rápidos</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
              <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={summaries.length === 0}>
-              <FileDown className="mr-2 h-4 w-4" /> Exportar Informe (CSV)
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleExportCSV} disabled={summaries.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> CSV
+              </Button>
+              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={summaries.length === 0}>
+                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+              </Button>
+            </div>
           </div>
         }
       />
@@ -181,17 +262,23 @@ export default function OverallVehicleCostsReportPage() {
           <CardDescription>Gráfico comparativo de costos por vehículo. Funcionalidad pendiente de implementación de base de datos.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-64 bg-muted rounded-md flex items-center justify-center">
-            <Image 
-              src="https://placehold.co/800x300.png" 
-              alt="Marcador de Posición de Gráfico de Costos Generales" 
-              width={800} 
-              height={300}
-              data-ai-hint="financial chart"
-              className="rounded-md"
-            />
-          </div>
-            <p className="text-sm text-muted-foreground mt-4">El gráfico de costos generales estará aquí una vez conectada la base de datos e implementada la lógica correspondiente.</p>
+          <ChartContainer
+            config={{
+              fuel: { label: "Combustible", color: "#22c55e" },
+              maint: { label: "Mantenimiento", color: "#f59e0b" },
+            }}
+            className="h-64"
+          >
+            <BarChart data={summaries.map(s => ({ label: s.plateNumber, fuel: s.totalFuelingCost, maint: s.totalMaintenanceCost }))}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} />
+              <YAxis />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Bar dataKey="fuel" stackId="cost" fill="var(--color-fuel)" />
+              <Bar dataKey="maint" stackId="cost" fill="var(--color-maint)" />
+            </BarChart>
+          </ChartContainer>
         </CardContent>
       </Card>
     </>

@@ -2,7 +2,7 @@
 import { getVehicleById, deleteVehicle, activateVehicle } from "@/lib/actions/vehicle-actions";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { CarFront, CalendarDays, Gauge, Tag, Fuel, ShieldCheck, AlertTriangle, Edit, Trash2, PlayCircle, PenToolIcon } from "lucide-react"; // Changed Tool to PenToolIcon
+import { CarFront, CalendarDays, Gauge, Tag, Fuel, ShieldCheck, AlertTriangle, Edit, Trash2, PlayCircle, PenToolIcon, User as UserIcon } from "lucide-react"; // Changed Tool to PenToolIcon
 import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -165,6 +165,12 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
             
             <DetailItem icon={CalendarDays} label="Fecha de Creación" value={format(new Date(vehicle.createdAt), "PPPp", { locale: es })} />
             <DetailItem icon={CalendarDays} label="Última Actualización" value={format(new Date(vehicle.updatedAt), "PPPp", { locale: es })} />
+            {vehicle.createdByUsername || vehicle.createdByUserId ? (
+              <DetailItem icon={UserIcon} label="Creado por" value={vehicle.createdByUsername ?? `Usuario #${vehicle.createdByUserId}`} />
+            ) : null}
+            {vehicle.updatedByUsername || vehicle.updatedByUserId ? (
+              <DetailItem icon={UserIcon} label="Actualizado por" value={vehicle.updatedByUsername ?? `Usuario #${vehicle.updatedByUserId}`} />
+            ) : null}
           </div>
         </CardContent>
       </Card>

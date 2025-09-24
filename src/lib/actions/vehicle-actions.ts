@@ -6,6 +6,7 @@ import { vehicleSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { getDbClient } from "@/lib/db"; 
 import * as sql from 'mssql';
+import { getCurrentUser } from "@/lib/auth/session";
 // import bcrypt from 'bcryptjs'; // Para ejemplos de hashing si fuera necesario aquí
 
 // PRODUCCIÓN: Consideraciones Generales para Acciones del Servidor en Producción:
@@ -52,6 +53,8 @@ export async function createVehicle(formData: VehicleFormData) {
     }
     
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       const request = pool.request();
       // Se genera una URL de imagen de marcador de posición. En producción, esto podría ser null
       // o gestionarse a través de un sistema de subida de archivos.
@@ -93,13 +96,13 @@ export async function createVehicle(formData: VehicleFormData) {
         INSERT INTO vehicles (
           plateNumber, vin, brand, model, year, fuelType, currentMileage, 
           nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, 
-          createdAt, updatedAt, imageUrl
+          createdByUserId, updatedByUserId, createdAt, updatedAt, imageUrl
         )
         OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl 
         VALUES (
           @plateNumber_ins, @vin_ins, @brand_ins, @model_ins, @year_ins, @fuelType_ins, @currentMileage_ins, 
           @nextPreventiveMaintenanceMileage_ins, @nextPreventiveMaintenanceDate_ins, @status_ins, 
-          GETDATE(), GETDATE(), @imageUrl_ins
+          ${userIdInt !== null ? userIdInt : 'NULL'}, ${userIdInt !== null ? userIdInt : 'NULL'}, GETDATE(), GETDATE(), @imageUrl_ins
         );
       `);
       
@@ -187,6 +190,8 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
     }
 
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       const request = pool.request();
       
       // Verificar si ya existe OTRO vehículo con la misma matrícula o VIN
@@ -234,6 +239,7 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
           nextPreventiveMaintenanceMileage = @nextPreventiveMaintenanceMileage_upd_val, 
           nextPreventiveMaintenanceDate = @nextPreventiveMaintenanceDate_upd_val, 
           status = @status_upd_val, 
+          updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
           updatedAt = GETDATE()
         OUTPUT INSERTED.id, INSERTED.plateNumber, INSERTED.vin, INSERTED.brand, INSERTED.model, INSERTED.year, INSERTED.fuelType, INSERTED.currentMileage, INSERTED.nextPreventiveMaintenanceMileage, INSERTED.nextPreventiveMaintenanceDate, INSERTED.status, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
         WHERE id = @id_upd;
@@ -318,10 +324,12 @@ export async function deleteVehicle(id: string) { // This action marks as inacti
     }
 
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       const request = pool.request();
       request.input('id_del', sql.NVarChar(50), id);
       // Esta es una "soft delete", solo cambia el estado.
-      const result = await request.query(`UPDATE vehicles SET status = 'Inactivo', updatedAt = GETDATE() WHERE id = @id_del;`);
+      const result = await request.query(`UPDATE vehicles SET status = 'Inactivo', updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @id_del;`);
       
       if (result.rowsAffected[0] === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'deleteVehicle', vehicleId: id, reason: 'Not found for deactivation' }, "Vehicle not found to mark as inactive");
@@ -378,9 +386,11 @@ export async function activateVehicle(id: string) {
     }
 
     try {
+      const currentUser = await getCurrentUser();
+      const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       const request = pool.request();
       request.input('id_act', sql.NVarChar(50), id);
-      const result = await request.query(`UPDATE vehicles SET status = 'Activo', updatedAt = GETDATE() WHERE id = @id_act;`);
+      const result = await request.query(`UPDATE vehicles SET status = 'Activo', updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @id_act;`);
 
       if (result.rowsAffected[0] === 0) {
         // PRODUCCIÓN: logger.warn({ action: 'activateVehicle', vehicleId: id, reason: 'Not found for activation' }, "Vehicle not found to activate");
@@ -493,7 +503,19 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
     try {
       const request = pool.request();
       request.input('idToFind_get', sql.NVarChar(50), id); 
-      const result = await request.query("SELECT id, plateNumber, vin, brand, model, year, fuelType, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, createdAt, updatedAt, imageUrl FROM vehicles WHERE id = @idToFind_get");
+      const result = await request.query(`
+        SELECT 
+          v.id, v.plateNumber, v.vin, v.brand, v.model, v.year, v.fuelType, v.currentMileage, 
+          v.nextPreventiveMaintenanceMileage, v.nextPreventiveMaintenanceDate, v.status, 
+          v.createdAt, v.updatedAt, v.imageUrl,
+          v.createdByUserId, v.updatedByUserId,
+          cu.username AS createdByUsername,
+          uu.username AS updatedByUsername
+        FROM vehicles v
+        LEFT JOIN users cu ON v.createdByUserId = cu.id
+        LEFT JOIN users uu ON v.updatedByUserId = uu.id
+        WHERE v.id = @idToFind_get
+      `);
       
       if (result.recordset.length > 0) {
         const row = result.recordset[0];
@@ -511,7 +533,11 @@ export async function getVehicleById(id: string): Promise<Vehicle | null> {
           status: row.status,
           createdAt: new Date(row.createdAt).toISOString(),
           updatedAt: new Date(row.updatedAt).toISOString(),
-          imageUrl: row.imageUrl
+          imageUrl: row.imageUrl,
+          createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+          updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+          createdByUsername: row.createdByUsername || undefined,
+          updatedByUsername: row.updatedByUsername || undefined
         } as Vehicle;
       }
       // PRODUCCIÓN: logger.warn({ action: 'getVehicleById', vehicleId: id, reason: 'Not found' }, "Vehicle not found by ID");
