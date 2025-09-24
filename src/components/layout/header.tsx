@@ -44,12 +44,7 @@ export function Header() {
                 <span>Configuración</span>
               </Link>
             </DropdownMenuItem>
-            <form
-              action={async () => {
-                "use server";
-                await logoutUser();
-              }}
-            >
+            <form action={logoutUser}>
               <DropdownMenuItem asChild>
                 <button type="submit" className="w-full flex items-center">
                   <LogOut className="mr-2 h-4 w-4" />

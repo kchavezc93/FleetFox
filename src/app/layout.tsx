@@ -7,7 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { ReactQueryProvider } from '@/components/react-query-provider';
 import { ThemeProvider } from '@/contexts/theme-provider';
 
-const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
+// Access env via any to avoid type dependency on @types/node
+const companyName = (process as any)?.env?.NEXT_PUBLIC_COMPANY_NAME ?? "Dos Robles";
 
 export const metadata: Metadata = {
   title: `${companyName} - Gestión de Flota`,

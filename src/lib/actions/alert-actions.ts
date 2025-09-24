@@ -6,6 +6,7 @@ import type { Alert } from "@/types";
 import { revalidatePath } from "next/cache";
 import { getUpcomingMaintenance, getFuelEfficiencyStats, getMaintenanceCostSummary } from "@/lib/actions/report-actions";
 import { getExpiringDocuments } from "@/lib/actions/document-actions";
+import { getCurrentUser } from "@/lib/auth/session";
 
 // Fetch alerts with optional status filter
 export async function getAlerts(params: { status?: Alert["status"] } = {}): Promise<Alert[]> {
@@ -18,9 +19,12 @@ export async function getAlerts(params: { status?: Alert["status"] } = {}): Prom
     if (status) req.input("status", sql.NVarChar(20), status);
     const where = status ? "WHERE a.status = @status" : "";
     const result = await req.query(`
-      SELECT a.id, a.vehicleId, v.plateNumber AS vehiclePlateNumber, a.alertType, a.message, a.dueDate, a.status, a.createdAt, a.severity
+      SELECT a.id, a.vehicleId, v.plateNumber AS vehiclePlateNumber, a.alertType, a.message, a.dueDate, a.status, a.createdAt, a.severity,
+             a.createdByUserId, a.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
       FROM alerts a
       LEFT JOIN vehicles v ON v.id = a.vehicleId
+      LEFT JOIN users cu ON a.createdByUserId = cu.id
+      LEFT JOIN users uu ON a.updatedByUserId = uu.id
       ${where}
       ORDER BY CASE a.status WHEN N'Nueva' THEN 0 WHEN N'Vista' THEN 1 ELSE 2 END, a.createdAt DESC;
     `);
@@ -34,6 +38,10 @@ export async function getAlerts(params: { status?: Alert["status"] } = {}): Prom
       status: row.status,
       createdAt: new Date(row.createdAt).toISOString(),
       severity: row.severity || undefined,
+      createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+      updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+      createdByUsername: row.createdByUsername || undefined,
+      updatedByUsername: row.updatedByUsername || undefined,
     })) as Alert[];
   } catch (err) {
     console.error("[Alert Actions] getAlerts error:", err);
@@ -49,9 +57,12 @@ export async function getRecentAlerts(limit = 10): Promise<Alert[]> {
     const req = pool.request();
     req.input("limit", sql.Int, limit);
     const result = await req.query(`
-      SELECT TOP (@limit) a.id, a.vehicleId, v.plateNumber AS vehiclePlateNumber, a.alertType, a.message, a.dueDate, a.status, a.createdAt, a.severity
+      SELECT TOP (@limit) a.id, a.vehicleId, v.plateNumber AS vehiclePlateNumber, a.alertType, a.message, a.dueDate, a.status, a.createdAt, a.severity,
+             a.createdByUserId, a.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
       FROM alerts a
       LEFT JOIN vehicles v ON v.id = a.vehicleId
+      LEFT JOIN users cu ON a.createdByUserId = cu.id
+      LEFT JOIN users uu ON a.updatedByUserId = uu.id
       WHERE a.status <> N'Resuelta'
       ORDER BY a.createdAt DESC;
     `);
@@ -65,6 +76,10 @@ export async function getRecentAlerts(limit = 10): Promise<Alert[]> {
       status: row.status,
       createdAt: new Date(row.createdAt).toISOString(),
       severity: row.severity || undefined,
+      createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+      updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+      createdByUsername: row.createdByUsername || undefined,
+      updatedByUsername: row.updatedByUsername || undefined,
     })) as Alert[];
   } catch (err) {
     console.error("[Alert Actions] getRecentAlerts error:", err);
@@ -72,7 +87,7 @@ export async function getRecentAlerts(limit = 10): Promise<Alert[]> {
   }
 }
 
-export async function createAlert(payload: Omit<Alert, "id" | "createdAt">): Promise<{ success: boolean; id?: string; message: string }> {
+export async function createAlert(payload: Omit<Alert, "id" | "createdAt"> & { actorUserId?: string }): Promise<{ success: boolean; id?: string; message: string }> {
   const dbClient = await getDbClient();
   if (!dbClient || dbClient.type !== "SQLServer" || !(dbClient as any).pool) {
     return { success: false, message: "BD no disponible para crear alerta." };
@@ -86,10 +101,11 @@ export async function createAlert(payload: Omit<Alert, "id" | "createdAt">): Pro
     req.input("dueDate", sql.Date, payload.dueDate ?? null);
     req.input("status", sql.NVarChar(20), payload.status);
     req.input("severity", sql.NVarChar(20), payload.severity ?? null);
+    const actorUserIdInt = payload.actorUserId ? parseInt(payload.actorUserId, 10) : null;
     const result = await req.query(`
-      INSERT INTO alerts (vehicleId, alertType, message, dueDate, status, severity, createdAt)
+      INSERT INTO alerts (vehicleId, alertType, message, dueDate, status, severity, createdAt, createdByUserId, updatedByUserId)
       OUTPUT INSERTED.id
-      VALUES (@vehicleId, @alertType, @message, @dueDate, @status, @severity, GETDATE());
+      VALUES (@vehicleId, @alertType, @message, @dueDate, @status, @severity, GETDATE(), ${actorUserIdInt !== null ? actorUserIdInt : 'NULL'}, ${actorUserIdInt !== null ? actorUserIdInt : 'NULL'});
     `);
     const id = result.recordset?.[0]?.id?.toString?.() ?? result.recordset?.[0]?.id;
     revalidatePath("/alerts");
@@ -111,8 +127,10 @@ export async function updateAlertStatus(id: string, status: Alert["status"]): Pr
     const req = pool.request();
     req.input("id", sql.NVarChar(50), id);
     req.input("status", sql.NVarChar(20), status);
+    const currentUser = await getCurrentUser();
+    const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
     await req.query(`
-      UPDATE alerts SET status = @status${status === "Resuelta" ? ", resolvedAt = GETDATE()" : ""} WHERE id = @id;
+      UPDATE alerts SET status = @status${status === "Resuelta" ? ", resolvedAt = GETDATE()" : ""}, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'} WHERE id = @id;
     `);
     revalidatePath("/alerts");
     revalidatePath("/dashboard");
@@ -138,6 +156,8 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
     return { success: false, created: 0, message: "BD no disponible." };
   }
   const pool = (dbClient as any).pool as sql.ConnectionPool;
+  const currentUser = await getCurrentUser();
+  const actorUserId = currentUser?.id;
 
   // Load thresholds from settings table if available
   const thresholds = await loadAlertThresholds(pool);
@@ -155,7 +175,7 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
       const msg = `${d.documentType}${d.documentNumber ? ` #${d.documentNumber}` : ""} vence en ${d.daysToExpiry} días (${d.expiryDate}).`;
       const exists = await existsOpenSimilar(pool, d.vehicleId, "DocumentExpiry", d.expiryDate);
       if (!exists) {
-        await createAlert({ vehicleId: d.vehicleId, alertType: "DocumentExpiry", message: msg, dueDate: d.expiryDate, status: "Nueva", severity: d.daysToExpiry <= 7 ? "High" : "Medium" });
+        await createAlert({ vehicleId: d.vehicleId, alertType: "DocumentExpiry", message: msg, dueDate: d.expiryDate, status: "Nueva", severity: d.daysToExpiry <= 7 ? "High" : "Medium", actorUserId });
         created++;
       }
     }
@@ -168,7 +188,7 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
       const severity: Alert["severity"] = item.reason === "Ambos" ? "High" : "Medium";
       const exists = await existsOpenSimilar(pool, item.vehicleId, "PreventiveMaintenanceDue", dueDate);
       if (!exists) {
-        await createAlert({ vehicleId: item.vehicleId, alertType: "PreventiveMaintenanceDue", message, dueDate, status: "Nueva", severity });
+        await createAlert({ vehicleId: item.vehicleId, alertType: "PreventiveMaintenanceDue", message, dueDate, status: "Nueva", severity, actorUserId });
         created++;
       }
     }
@@ -180,7 +200,7 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
         const msg = `Eficiencia baja (${s.averageEfficiency.toFixed(1)} km/gal < ${lowEffThreshold}).`;
         const exists = await existsOpenSimilar(pool, s.vehicleId, "LowMileageEfficiency");
         if (!exists) {
-          await createAlert({ vehicleId: s.vehicleId, alertType: "LowMileageEfficiency", message: msg, status: "Nueva", severity: "Medium" });
+          await createAlert({ vehicleId: s.vehicleId, alertType: "LowMileageEfficiency", message: msg, status: "Nueva", severity: "Medium", actorUserId });
           created++;
         }
       }
@@ -196,7 +216,7 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
         const msg = `Costo de mantenimiento alto en ${windowDays} días (C$ ${c.totalCost.toFixed(2)} > C$ ${highMaintThreshold.toFixed(2)}).`;
         const exists = await existsOpenSimilar(pool, c.vehicleId, "HighMaintenanceCost");
         if (!exists) {
-          await createAlert({ vehicleId: c.vehicleId, alertType: "HighMaintenanceCost", message: msg, status: "Nueva", severity: "High" });
+          await createAlert({ vehicleId: c.vehicleId, alertType: "HighMaintenanceCost", message: msg, status: "Nueva", severity: "High", actorUserId });
           created++;
         }
       }

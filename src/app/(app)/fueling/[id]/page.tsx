@@ -46,7 +46,7 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
           <CardTitle>Información</CardTitle>
           <CardDescription>Detalle completo del registro.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
+  <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
           <div>
             <div className="text-sm text-muted-foreground">Fecha</div>
             <div className="font-medium">{format(new Date(log.fuelingDate), 'PP')}</div>
@@ -79,6 +79,18 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
             <div className="md:col-span-2">
               <div className="text-sm text-muted-foreground">Recibo</div>
               <a href={log.imageUrl} target="_blank" className="text-primary underline">Ver imagen</a>
+            </div>
+          )}
+          {(log.createdByUsername || log.createdByUserId) && (
+            <div>
+              <div className="text-sm text-muted-foreground">Creado por</div>
+              <div className="font-medium">{log.createdByUsername ?? `Usuario #${log.createdByUserId}`}</div>
+            </div>
+          )}
+          {(log.updatedByUsername || log.updatedByUserId) && (
+            <div>
+              <div className="text-sm text-muted-foreground">Actualizado por</div>
+              <div className="font-medium">{log.updatedByUsername ?? `Usuario #${log.updatedByUserId}`}</div>
             </div>
           )}
         </CardContent>

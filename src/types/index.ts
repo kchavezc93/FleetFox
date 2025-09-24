@@ -64,7 +64,13 @@ export interface FuelingLog {
   fuelEfficiencyKmPerGallon?: number;
   station: string;
   createdAt: string; // ISO date string
+  updatedAt?: string; // ISO date string
   imageUrl?: string;
+  // Auditoría
+  createdByUserId?: string;
+  updatedByUserId?: string;
+  createdByUsername?: string;
+  updatedByUsername?: string;
 }
 
 export interface UserProfile {
@@ -89,6 +95,11 @@ export interface Alert {
   status: "Nueva" | "Vista" | "Resuelta";
   createdAt: string; // ISO date string
   severity?: "Low" | "Medium" | "High";
+  // Auditoría
+  createdByUserId?: string;
+  updatedByUserId?: string;
+  createdByUsername?: string;
+  updatedByUsername?: string;
 }
 
 export interface AuditEvent {

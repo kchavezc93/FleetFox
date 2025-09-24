@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
-import { CarFront, PlusCircle, FileDown, PlayCircle, Trash2, Tool } from "lucide-react";
+import { CarFront, PlusCircle, PlayCircle, Trash2 } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -23,6 +23,7 @@ import {
 import { MoreHorizontal } from "lucide-react";
 import { getVehicles, deleteVehicle, activateVehicle } from "@/lib/actions/vehicle-actions";
 import { revalidatePath } from "next/cache";
+import { VehiclesExportButtons } from "@/components/vehicles-export";
 
 
 export default async function VehiclesPage() {
@@ -36,10 +37,19 @@ export default async function VehiclesPage() {
         icon={CarFront}
         actions={
           <>
-            <Button variant="outline">
-              <FileDown className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
+            <VehiclesExportButtons
+              rows={vehicles.map(v => ({
+                plateNumber: v.plateNumber,
+                brand: v.brand,
+                model: v.model,
+                year: v.year,
+                fuelType: v.fuelType,
+                currentMileage: v.currentMileage,
+                status: v.status,
+                nextPreventiveMaintenanceDate: v.nextPreventiveMaintenanceDate,
+                nextPreventiveMaintenanceMileage: v.nextPreventiveMaintenanceMileage,
+              }))}
+            />
             <Link href="/vehicles/new">
               <Button className="bg-primary hover:bg-primary/90">
                 <PlusCircle className="mr-2 h-4 w-4" />

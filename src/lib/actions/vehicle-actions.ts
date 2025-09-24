@@ -137,7 +137,6 @@ export async function createVehicle(formData: VehicleFormData) {
     console.warn(`[Create Vehicle] La creación de vehículos no está implementada para el tipo de BD: ${dbClient.type}. Por favor, implemente la lógica SQL.`);
     return { 
       message: `Creación de vehículo (${data.plateNumber}) pendiente de implementación SQL para ${dbClient.type}.`, 
-      vehicle: null,
       success: false,
       errors: { form: `Implementación SQL pendiente para ${dbClient.type}.` },
     };

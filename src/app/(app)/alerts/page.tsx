@@ -108,6 +108,7 @@ export default function AlertsPage() {
                   <TableHead>Mensaje</TableHead>
                   <TableHead>Vence</TableHead>
                   <TableHead>Estado</TableHead>
+                  <TableHead>Creado por</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -119,6 +120,7 @@ export default function AlertsPage() {
                     <TableCell>{a.message}</TableCell>
                     <TableCell>{a.dueDate || "N/D"}</TableCell>
                     <TableCell>{a.status}</TableCell>
+                    <TableCell>{a.createdByUsername || a.createdByUserId || "-"}</TableCell>
                     <TableCell className="text-right space-x-2">
                       {a.status === "Nueva" && (
                         <Button variant="outline" size="sm" onClick={() => markStatus(a.id, "Vista")} disabled={working}>

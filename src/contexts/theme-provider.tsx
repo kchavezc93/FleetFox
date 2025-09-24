@@ -40,15 +40,16 @@ export function ThemeProvider({
   const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>();
 
   const applyTheme = useCallback((selectedTheme: Theme) => {
-    let currentTheme = selectedTheme;
+    let currentTheme: Theme = selectedTheme;
     if (selectedTheme === "system") {
       currentTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     }
-    
+
     const root = window.document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(currentTheme);
-    setResolvedTheme(currentTheme);
+    const resolved: "light" | "dark" = currentTheme === "dark" ? "dark" : "light";
+    setResolvedTheme(resolved);
   }, []);
 
 

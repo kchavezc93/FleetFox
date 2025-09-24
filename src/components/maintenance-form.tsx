@@ -76,15 +76,16 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
     },
   });
 
-  const { fields: newAttachmentFields, append: appendNewAttachment, remove: removeNewAttachment } = useFieldArray({
+  const { fields: newAttachmentFields, append: appendNewAttachment, remove: removeNewAttachment } = useFieldArray<MaintenanceLogSchema>({
     control: form.control,
     name: "newAttachments",
   });
   
-  const { fields: attachmentsToRemoveFields, append: appendAttachmentToRemove } = useFieldArray({
-    control: form.control,
-    name: "attachmentsToRemove",
-  });
+  // Manage attachmentsToRemove with a simple setter to avoid generic constraints
+  const appendAttachmentToRemove = (attachmentId: string) => {
+    const current = (form.getValues("attachmentsToRemove") || []) as MaintenanceLogSchema["attachmentsToRemove"]; 
+    form.setValue("attachmentsToRemove", [...current, attachmentId], { shouldDirty: true });
+  };
 
 
   useEffect(() => {
@@ -162,7 +163,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
   const removeAttachment = (attachmentIdOrTempId: string, isNew: boolean) => {
     if (isNew) {
       // Find the index in form's newAttachments array by comparing name/content (or use tempId if stored there)
-      const formAttachmentIndex = form.getValues("newAttachments").findIndex(att => 
+      const formAttachmentIndex = (form.getValues("newAttachments") as MaintenanceLogSchema["newAttachments"]).findIndex((att) => 
         currentAttachments.find(ca => ca.tempId === attachmentIdOrTempId && ca.fileName === att.name && ca.fileContent === att.content)
       );
       if (formAttachmentIndex !== -1) {
@@ -224,7 +225,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
+          <FormField<MaintenanceLogSchema, "vehicleId">
             control={form.control}
             name="vehicleId"
             render={({ field }) => (
@@ -248,7 +249,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<MaintenanceLogSchema, "maintenanceType">
             control={form.control}
             name="maintenanceType"
             render={({ field }) => (
@@ -269,7 +270,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<MaintenanceLogSchema, "executionDate">
             control={form.control}
             name="executionDate"
             render={({ field }) => (
@@ -308,7 +309,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<MaintenanceLogSchema, "mileageAtService">
             control={form.control}
             name="mileageAtService"
             render={({ field }) => (
@@ -321,7 +322,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
               </FormItem>
             )}
           />
-           <FormField
+           <FormField<MaintenanceLogSchema, "cost">
             control={form.control}
             name="cost"
             render={({ field }) => (
@@ -334,7 +335,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<MaintenanceLogSchema, "provider">
             control={form.control}
             name="provider"
             render={({ field }) => (
@@ -349,7 +350,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
           />
         </div>
 
-        <FormField
+  <FormField<MaintenanceLogSchema, "activitiesPerformed">
             control={form.control}
             name="activitiesPerformed"
             render={({ field }) => (
@@ -418,7 +419,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
            <>
             <h3 className="text-lg font-medium text-primary pt-4 border-t">Próximo Mantenimiento Programado (Preventivo)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormField
+              <FormField<MaintenanceLogSchema, "nextMaintenanceMileageScheduled">
                 control={form.control}
                 name="nextMaintenanceMileageScheduled"
                 render={({ field }) => (
@@ -438,7 +439,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
                   </FormItem>
                 )}
               />
-              <FormField
+              <FormField<MaintenanceLogSchema, "nextMaintenanceDateScheduled">
                 control={form.control}
                 name="nextMaintenanceDateScheduled"
                 render={({ field }) => (

@@ -18,12 +18,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { LogIn, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { loginUser } from "@/lib/actions/auth-actions";
-import React from "react";
+import React, { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image"; 
 
-export default function LoginPage() {
+function LoginFormInner() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const router = useRouter();
@@ -157,5 +157,14 @@ export default function LoginPage() {
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+export default function LoginPage() {
+  // Wrap client router/searchParams usage in Suspense per Next.js guidance
+  return (
+    <Suspense fallback={<div className="w-full max-w-md text-center py-8">Cargando…</div>}>
+      <LoginFormInner />
+    </Suspense>
   );
 }

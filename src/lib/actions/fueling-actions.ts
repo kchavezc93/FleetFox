@@ -101,7 +101,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
             costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, 
             createdByUserId, updatedByUserId, createdAt, updatedAt
           )
-          OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
+          OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl, INSERTED.createdByUserId, INSERTED.updatedByUserId
           VALUES (
             @fl_vehicleId, @fl_vehiclePlateNumber, @fl_fuelingDate, @fl_mileageAtFueling, @fl_quantityLiters,
             @fl_costPerLiter, @fl_totalCost, @fl_station, @fl_imageUrl, @fl_fuelEfficiency,
@@ -115,7 +115,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
         throw new Error("Fallo al crear el registro de combustible, la base de datos no devolvió un ID.");
       }
       const newDbRecord = result.recordset[0];
-      const newLog: FuelingLog = { 
+    const newLog: FuelingLog = { 
           id: newDbRecord.id.toString(), 
           ...data,
           vehiclePlateNumber: vehiclePlateNumber,
@@ -123,7 +123,9 @@ export async function createFuelingLog(formData: FuelingFormData) {
           fuelingDate: data.fuelingDate.toISOString().split('T')[0],
           imageUrl: newDbRecord.imageUrl,
           createdAt: new Date(newDbRecord.createdAt).toISOString(),
-          // updatedAt: new Date(newDbRecord.updatedAt).toISOString()
+      updatedAt: new Date(newDbRecord.updatedAt).toISOString(),
+      createdByUserId: newDbRecord.createdByUserId ? newDbRecord.createdByUserId.toString() : undefined,
+      updatedByUserId: newDbRecord.updatedByUserId ? newDbRecord.updatedByUserId.toString() : undefined,
       };
 
       if (data.mileageAtFueling > originalVehicleMileage) {
@@ -189,9 +191,12 @@ export async function getFuelingLogs(): Promise<FuelingLog[]> {
       const request = pool.request();
       const result = await request.query(`
         SELECT 
-          id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
-          costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
-        FROM fueling_logs 
+          fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
+          fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+          fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
+        FROM fueling_logs fl
+        LEFT JOIN users cu ON fl.createdByUserId = cu.id
+        LEFT JOIN users uu ON fl.updatedByUserId = uu.id
         ORDER BY fuelingDate DESC, createdAt DESC
       `);
       return result.recordset.map(row => ({
@@ -207,7 +212,11 @@ export async function getFuelingLogs(): Promise<FuelingLog[]> {
         imageUrl: row.imageUrl,
         fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
         createdAt: new Date(row.createdAt).toISOString(),
-        // updatedAt: new Date(row.updatedAt).toISOString()
+        updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+        createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+        updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+        createdByUsername: row.createdByUsername || undefined,
+        updatedByUsername: row.updatedByUsername || undefined,
       })) as FuelingLog[];
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getFuelingLogs', error: (error as Error).message, stack: (error as Error).stack }, "Error fetching fueling logs");
@@ -245,11 +254,14 @@ export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<Fuel
         request.input('targetVehicleId', sql.NVarChar(50), vehicleId);
         const result = await request.query(`
           SELECT 
-            id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
-            costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
-          FROM fueling_logs 
-          WHERE vehicleId = @targetVehicleId 
-          ORDER BY fuelingDate DESC, createdAt DESC
+            fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
+            fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+            fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
+          FROM fueling_logs fl
+          LEFT JOIN users cu ON fl.createdByUserId = cu.id
+          LEFT JOIN users uu ON fl.updatedByUserId = uu.id
+          WHERE fl.vehicleId = @targetVehicleId 
+          ORDER BY fl.fuelingDate DESC, fl.createdAt DESC
         `);
         return result.recordset.map(row => ({
           id: row.id.toString(),
@@ -264,7 +276,11 @@ export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<Fuel
           imageUrl: row.imageUrl,
           fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
           createdAt: new Date(row.createdAt).toISOString(),
-          // updatedAt: new Date(row.updatedAt).toISOString()
+          updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+          createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+          updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+          createdByUsername: row.createdByUsername || undefined,
+          updatedByUsername: row.updatedByUsername || undefined,
         })) as FuelingLog[];
       } catch (error) {
         // PRODUCCIÓN: logger.error({ action: 'getFuelingLogsByVehicleId', vehicleId, error: (error as Error).message, stack: (error as Error).stack }, "Error fetching fueling logs for vehicle");
@@ -294,10 +310,13 @@ export async function getFuelingLogById(id: string): Promise<FuelingLog | null> 
     request.input('id_find', sql.NVarChar(50), id);
     const result = await request.query(`
       SELECT TOP 1 
-        id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
-        costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
-      FROM fueling_logs 
-      WHERE id = @id_find
+        fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
+        fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+        fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
+      FROM fueling_logs fl
+      LEFT JOIN users cu ON fl.createdByUserId = cu.id
+      LEFT JOIN users uu ON fl.updatedByUserId = uu.id
+      WHERE fl.id = @id_find
     `);
     if (!result.recordset.length) return null;
     const row = result.recordset[0];
@@ -314,6 +333,11 @@ export async function getFuelingLogById(id: string): Promise<FuelingLog | null> 
       imageUrl: row.imageUrl || undefined,
       fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
       createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+      createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+      updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+      createdByUsername: row.createdByUsername || undefined,
+      updatedByUsername: row.updatedByUsername || undefined,
     };
     return log;
   } catch (err) {
@@ -468,11 +492,14 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const result = await request.query(`
       SELECT 
-        id, vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters,
-        costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, createdAt, updatedAt
-      FROM fueling_logs
+        fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
+        fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+        fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
+      FROM fueling_logs fl
+      LEFT JOIN users cu ON fl.createdByUserId = cu.id
+      LEFT JOIN users uu ON fl.updatedByUserId = uu.id
       ${whereSql}
-      ORDER BY fuelingDate DESC, createdAt DESC
+      ORDER BY fl.fuelingDate DESC, fl.createdAt DESC
     `);
     return result.recordset.map((row: any) => ({
       id: row.id.toString(),
@@ -487,6 +514,11 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
       imageUrl: row.imageUrl || undefined,
       fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
       createdAt: new Date(row.createdAt).toISOString(),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+      createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+      updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+      createdByUsername: row.createdByUsername || undefined,
+      updatedByUsername: row.updatedByUsername || undefined,
     }));
   } catch (err) {
     console.error(`[SQL Server Error] getFuelingLogsFiltered`, err);

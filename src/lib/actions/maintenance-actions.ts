@@ -542,8 +542,12 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
           ml.id, ml.vehicleId, ml.vehiclePlateNumber, ml.maintenanceType, ml.executionDate, ml.mileageAtService,
           ml.activitiesPerformed, ml.cost, ml.provider, ml.nextMaintenanceDateScheduled,
           ml.nextMaintenanceMileageScheduled, ml.createdAt, ml.updatedAt,
+          ml.createdByUserId, ml.updatedByUserId,
+          cu.username AS createdByUsername, uu.username AS updatedByUsername,
           (SELECT COUNT(*) FROM attached_documents ad WHERE ad.maintenance_log_id = ml.id) AS attachmentCount 
         FROM maintenance_logs ml
+        LEFT JOIN users cu ON ml.createdByUserId = cu.id
+        LEFT JOIN users uu ON ml.updatedByUserId = uu.id
         ORDER BY ml.executionDate DESC, ml.createdAt DESC
       `);
       return result.recordset.map(row => ({
@@ -558,10 +562,14 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
         provider: row.provider,
         nextMaintenanceDateScheduled: row.nextMaintenanceDateScheduled ? new Date(row.nextMaintenanceDateScheduled).toISOString().split('T')[0] : "",
         nextMaintenanceMileageScheduled: row.nextMaintenanceMileageScheduled,
-        createdAt: new Date(row.createdAt).toISOString(),
-        // updatedAt: new Date(row.updatedAt).toISOString(), // Descomentar si se usa y se devuelve
-        attachments: [] // Para la lista general, no cargamos los adjuntos detallados.
-                        // Podrías usar row.attachmentCount para mostrar un indicador si es necesario.
+  createdAt: new Date(row.createdAt).toISOString(),
+  // updatedAt: new Date(row.updatedAt).toISOString(), // Descomentar si se usa y se devuelve
+  attachments: [], // Para la lista general, no cargamos los adjuntos detallados.
+  // Podrías usar row.attachmentCount para mostrar un indicador si es necesario.
+  createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+  updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+  createdByUsername: row.createdByUsername || undefined,
+  updatedByUsername: row.updatedByUsername || undefined,
       })) as MaintenanceLog[];
     } catch (error) {
       // PRODUCCIÓN: logger.error({ action: 'getMaintenanceLogs', error: (error as Error).message, stack: (error as Error).stack }, "Error fetching maintenance logs");

@@ -1,7 +1,7 @@
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
-import { Wrench, PlusCircle, FileDown, MoreHorizontal } from "lucide-react";
+import { Wrench, PlusCircle, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import {
   Table,
@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MaintenanceExportButtons } from "@/components/maintenance-export";
 
 export default async function MaintenancePage() {
   await requirePermission('/maintenance');
@@ -35,10 +36,18 @@ export default async function MaintenancePage() {
         icon={Wrench}
         actions={
            <>
-            <Button variant="outline">
-              <FileDown className="mr-2 h-4 w-4" />
-              Exportar CSV
-            </Button>
+            <MaintenanceExportButtons
+              rows={logs.map(l => ({
+                vehiclePlateNumber: l.vehiclePlateNumber || "",
+                maintenanceType: l.maintenanceType,
+                executionDate: l.executionDate,
+                mileageAtService: l.mileageAtService,
+                cost: l.cost,
+                provider: l.provider ?? undefined,
+                createdBy: l.createdByUsername || undefined,
+                updatedBy: l.updatedByUsername || undefined,
+              }))}
+            />
             <Link href="/maintenance/new">
               <Button className="bg-primary hover:bg-primary/90">
                 <PlusCircle className="mr-2 h-4 w-4" />

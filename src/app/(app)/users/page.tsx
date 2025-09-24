@@ -5,10 +5,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import Link from "next/link";
-import { getUsers, saveUser } from "@/lib/actions/user-actions";
+import { getUsers, saveUser, deleteUser } from "@/lib/actions/user-actions";
 import ActiveToggleCell from "@/components/users/active-toggle-cell";
 import { requirePermission } from "@/lib/authz";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal } from "lucide-react";
+import { UsersExportButtons } from "@/components/users-export";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default async function UserManagementPage() {
   await requirePermission('/users');
@@ -37,12 +56,24 @@ export default async function UserManagementPage() {
         description="Administra los usuarios y sus roles en la plataforma."
         icon={Users}
         actions={
-          <Button asChild className="bg-primary hover:bg-primary/90">
-            <Link href="/users/new">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Agregar Usuario
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <UsersExportButtons
+              rows={users.map(u => ({
+                username: u.username,
+                email: u.email,
+                role: u.role,
+                active: (u as any).active ?? true,
+                createdAt: (u as any).createdAt ?? undefined,
+                updatedAt: (u as any).updatedAt ?? undefined,
+              }))}
+            />
+            <Button asChild className="bg-primary hover:bg-primary/90">
+              <Link href="/users/new">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Agregar Usuario
+              </Link>
+            </Button>
+          </div>
         }
       />
       <Card>
@@ -96,9 +127,42 @@ export default async function UserManagementPage() {
                         </div>
                       </td>
                       <td className="py-2 pr-4 text-right">
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/users/${u.id}/edit`}>Editar</Link>
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Abrir menú</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/users/${u.id}/edit`}>Editar</Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                              <form action={async () => { "use server"; await deleteUser(u.id); }}>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <button type="button" className="w-full text-left text-red-600">Eliminar</button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Esta acción eliminará al usuario de forma permanente y cerrará sus sesiones activas. ¿Deseas continuar?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction asChild>
+                                        <button type="submit" className="text-red-600">Eliminar</button>
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              </form>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}

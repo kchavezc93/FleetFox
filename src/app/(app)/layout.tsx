@@ -80,8 +80,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       permissions: row.permissions ? JSON.parse(row.permissions) : [],
     }
   } as const;
-  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
-  const companyLogoUrl = process.env.NEXT_PUBLIC_COMPANY_LOGO_URL;
+  const companyName = (process as any)?.env?.NEXT_PUBLIC_COMPANY_NAME ?? "Dos Robles";
+  const companyLogoUrl = (process as any)?.env?.NEXT_PUBLIC_COMPANY_LOGO_URL;
 
   return (
     <SidebarProvider defaultOpen>

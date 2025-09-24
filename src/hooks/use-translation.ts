@@ -11,6 +11,7 @@ interface UseTranslationReturn {
   setLanguage: (language: Language) => void;
   languages: Language[];
   isLoading: (key: string) => boolean;
+  defaultLanguage: Language;
 }
 
 export function useTranslation(): UseTranslationReturn {
@@ -88,5 +89,5 @@ export function useTranslation(): UseTranslationReturn {
   
   const isLoading = (key:string) => loadingKeys.has(key);
 
-  return { t, language, setLanguage, languages, isLoading };
+  return { t, language, setLanguage, languages, isLoading, defaultLanguage };
 }

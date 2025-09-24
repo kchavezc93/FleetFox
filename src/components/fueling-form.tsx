@@ -115,7 +115,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <FormField
+          <FormField<FuelingLogSchema, "vehicleId">
             control={form.control}
             name="vehicleId"
             render={({ field }) => (
@@ -139,7 +139,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "fuelingDate">
             control={form.control}
             name="fuelingDate"
             render={({ field }) => (
@@ -178,7 +178,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "mileageAtFueling">
             control={form.control}
             name="mileageAtFueling"
             render={({ field }) => (
@@ -191,7 +191,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "quantityLiters">
             control={form.control}
             name="quantityLiters" 
             render={({ field }) => (
@@ -204,7 +204,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "costPerLiter">
             control={form.control}
             name="costPerLiter" 
             render={({ field }) => (
@@ -217,7 +217,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "totalCost">
             control={form.control}
             name="totalCost"
             render={({ field }) => (
@@ -230,7 +230,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
               </FormItem>
             )}
           />
-          <FormField
+          <FormField<FuelingLogSchema, "station">
             control={form.control}
             name="station"
             render={({ field }) => (
@@ -245,7 +245,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
           />
         </div>
 
-        <FormField
+          <FormField<FuelingLogSchema, "imageUrl">
             control={form.control}
             name="imageUrl"
             render={({ field }) => (

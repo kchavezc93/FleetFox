@@ -8,8 +8,9 @@ Aplicación Next.js para gestionar flota vehicular: mantenimientos, combustible,
 - Next.js 15 (App Router)
 - React 18, TypeScript, React Hook Form + Zod
 - TailwindCSS + shadcn/ui (Radix UI)
-- TanStack Query v5
+- TanStack Query v5 (para datos cliente cuando aplica)
 - SQL Server (mssql) como base de datos
+- ExcelJS para exportaciones a XLSX (reemplaza libs vulnerables)
 
 Scripts disponibles en `package.json`:
 
@@ -33,11 +34,9 @@ Scripts disponibles en `package.json`:
     cd <nombre-del-directorio-del-proyecto>
     ```
 
-2.  **Instalar Dependencias**:
-    ```bash
+2.  **Instalar Dependencias** (Windows PowerShell):
+    ```powershell
     npm install
-    # o
-    yarn install
     ```
     Esto instalará Next.js, React, TailwindCSS, ShadCN UI, y otras dependencias como `mssql` (para SQL Server) y `bcryptjs` (para contraseñas).
 
@@ -53,16 +52,17 @@ Scripts disponibles en `package.json`:
 
 ## Esquema de Base de Datos (fuente única)
 
-Usa el script SQL en `docs/sql/schema.sql` como fuente de verdad del esquema. Allí se definen tablas, índices y triggers necesarios para:
+Usa los scripts SQL en `docs/` como fuente de verdad del esquema. Allí se definen tablas, índices y triggers necesarios para:
 
 - users, sessions
 - vehicles
 - fueling_logs
 - maintenance_logs
 - attached_documents
-- alerts (opcional)
+- alerts y settings (umbrales)
+- vehicle_documents (vencimiento de documentos)
 
-Evita duplicar definiciones de tablas en el README; cualquier cambio debe ir a `docs/sql/schema.sql`.
+Evita duplicar definiciones de tablas en el README; cualquier cambio debe ir a los archivos de `docs/` (por ejemplo, `alerts-schema.sql`, `settings-schema.sql`, `documents-schema.sql`).
 
 ### Fallback local para configuración de BD
 
@@ -76,8 +76,8 @@ Para desarrollo, si las variables de entorno no están completas, `src/lib/db.ts
 1.  **Variables de Entorno**:
     *   Crea un archivo `.env` en la raíz del proyecto copiando `.env.example`.
     *   Actualiza las variables en `.env`:
-        *   `NEXT_PUBLIC_COMPANY_NAME`: Nombre de la empresa (ej. "Dos Robles").
-        *   `NEXT_PUBLIC_COMPANY_LOGO_URL`: URL o ruta local a la imagen del logo (ej. `/logo.png` si está en la carpeta `public`).
+    *   `NEXT_PUBLIC_COMPANY_NAME`: Nombre de la empresa (ej. "Dos Robles").
+    *   `NEXT_PUBLIC_COMPANY_LOGO_URL`: URL o ruta local a la imagen del logo (ej. `/logo.png` si está en la carpeta `public`).
         *   **Variables de Base de Datos**:
             *   `DB_TYPE`: Tipo de base de datos (ej. "SQLServer").
             *   `DB_HOST`: Host de tu servidor de base de datos (ej. "localhost").
@@ -106,23 +106,19 @@ Para desarrollo, si las variables de entorno no están completas, `src/lib/db.ts
         *   Asegúrate de que la interacción con el pool de `mssql` (ej. `pool.request()`, `request.input()`, `request.query()`) sea correcta.
         *   Implementa un manejo de errores robusto para las operaciones de base de datos.
 
-Nota: La conexión a SQL Server está esbozada en `src/lib/db.ts` con un pool global y eventos de error. Ajusta `DB_ENCRYPT`/`DB_TRUST_SERVER_CERTIFICATE` para tu entorno.
+Nota: La conexión a SQL Server está implementada en `src/lib/db.ts` con un pool global y manejo de errores. Ajusta `DB_ENCRYPT`/`DB_TRUST_SERVER_CERTIFICATE` para tu entorno.
 
 ## Ejecutar la Aplicación Localmente (Desarrollo)
 
-```bash
+```powershell
 npm run dev
-# o
-yarn dev
 ```
-Esto iniciará la aplicación en modo de desarrollo, generalmente en `http://localhost:9002` (según `package.json`).
+Esto iniciará la aplicación en modo de desarrollo en `http://localhost:9002`.
 
 ## Construir para Producción
 
-```bash
+```powershell
 npm run build
-# o
-yarn build
 ```
 Esto creará una compilación optimizada de la aplicación en la carpeta `.next`.
 
@@ -151,15 +147,32 @@ Para producción, la opción más estable y simple es ejecutar la app Node.js co
 ## Notas de arquitectura y seguridad
 
 - Autenticación: Implementada con `bcryptjs`, sesiones en BD (tabla `sessions`) y cookie HttpOnly `session_token`. Middleware protege rutas y el layout valida sesión en la BD.
+- Autorización: Guard SSR `requirePermission` aplicado a rutas clave. Página `/forbidden` para accesos no permitidos.
+- Auditoría: Registro centralizado de eventos en `audit_logs` y página de administración en Settings.
+- Alertas: Motor de alertas con reglas para mantenimiento preventivo, baja eficiencia, alto costo de mantenimiento y vencimiento de documentos. Umbrales configurables en Settings.
+- Exportaciones: Utilidad centralizada con ExcelJS para XLSX (estilos y formatos incluidos). Listas con exportación: Combustible, Vehículos, Mantenimiento y Usuarios; además de los reportes. En Mantenimiento se incluyen columnas de auditoría (Creado/Actualizado por) cuando están disponibles.
 - Revalidación: Acciones del servidor usan `revalidatePath` tras escrituras para refrescar UI.
 - Validación: Formularios validados con Zod y `react-hook-form`.
 - Imágenes remotas: Permitidas desde `placehold.co` en `next.config.ts`.
+
+## Mantenimiento y limpieza (Sep 2025)
+
+- Se eliminaron dependencias no utilizadas para reducir superficie de ataque y tiempo de instalación: `firebase`, `@tanstack-query-firebase/react`, `dotenv`, y varios paquetes de Radix no empleados (menubar, progress, slider, tabs).
+- Se reemplazaron los wrappers UI no usados por stubs vacíos para evitar roturas si algún import quedaba colgando: `src/components/ui/{menubar,progress,slider,tabs}.tsx`.
+- Si en el futuro se necesitan, pueden restaurarse fácilmente desde shadcn/ui.
 
 ## Roadmap (estado actual)
 
 Hecho
 - SQL Server integrado (pool `mssql` en `src/lib/db.ts`).
 - CRUD completo: usuarios, vehículos, combustible, mantenimiento, adjuntos.
+    - Usuarios: listar, crear, editar, activar/desactivar, eliminar (con confirmación).
+    - Vehículos: listar, crear, ver detalle, editar, activar/inactivar (soft-delete con confirmación en detalle y lista).
+    - Combustible: listar (con filtros), crear, ver detalle, editar, eliminar (con confirmación), exportar a XLSX.
+    - Vehículos: exportar listado a XLSX.
+    - Mantenimiento: exportar listado a XLSX.
+    - Usuarios: exportar listado a XLSX.
+    - Mantenimiento: listar, crear, ver detalle, editar, adjuntar/eliminar archivos.
 - Autenticación/sesiones: cookie HttpOnly + validación en BD + middleware de acceso.
 - Reportes con agregaciones en servidor y filtros consistentes (vehículo + rango de fechas):
     - Costos de mantenimiento
@@ -168,7 +181,7 @@ Hecho
     - Análisis de eficiencia
     - Mantenimiento próximo (umbrales configurables)
     - Informe comparativo (consolidado)
-- Exportar CSV e impresión en todos los reportes
+- Exportar a Excel (XLSX) y CSV cuando aplique
 - UI en español y menú por roles (admin restringe configuración sensible)
 
 Pendiente
@@ -177,9 +190,9 @@ Pendiente
 - Tests (unitarios e integración) para acciones críticas
 
 Fuente única de tablas/esquema
-- `docs/sql/schema.sql` (no duplicar en otros documentos)
+- `docs/*.sql` (no duplicar en otros documentos)
 
 Recomendaciones
 - Añadir presets adicionales de fechas por “trimestre” y “año fiscal” si aplica
-- Agregar auditoría (createdBy/updatedBy) en tablas clave
+- Auditoría aplicada en tablas clave (vehículos, mantenimiento, combustible, alertas y settings) con `createdByUserId`/`updatedByUserId` y joins para mostrar nombres de usuario en UI/exports cuando corresponda.
 - Añadir tareas programadas para recalcular métricas de largo plazo
