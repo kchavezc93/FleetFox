@@ -22,14 +22,15 @@ import React, { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image"; 
+import type ReactNamespace from "react";
 
 function LoginFormInner() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const companyName = process.env.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
-  const companyLogoUrl = process.env.NEXT_PUBLIC_COMPANY_LOGO_URL;
+  const companyName = (process as any)?.env?.NEXT_PUBLIC_COMPANY_NAME || "Dos Robles";
+  const companyLogoUrl = (process as any)?.env?.NEXT_PUBLIC_COMPANY_LOGO_URL;
 
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),

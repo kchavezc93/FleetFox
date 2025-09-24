@@ -145,6 +145,11 @@ export async function logoutUser() {
   }
 }
 
+// Wrapper Server Action compatible with <form action={...}> signature
+export async function logoutAction(_formData: FormData): Promise<void> {
+  await logoutUser();
+}
+
 // Helper: get current user from session cookie
 export async function getCurrentUser(): Promise<{ id: string; username: string; email: string; role: 'Admin'|'Standard' } | null> {
   try {

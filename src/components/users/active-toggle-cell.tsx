@@ -17,7 +17,7 @@ import {
 
 type ActiveToggleCellProps = {
   active: boolean;
-  action: (formData: FormData) => void; // server action bound with userId & nextActive
+  action: (formData: FormData) => void | Promise<void>; // server action bound with userId & nextActive
 };
 
 export default function ActiveToggleCell({ active, action }: ActiveToggleCellProps) {
@@ -41,7 +41,7 @@ export default function ActiveToggleCell({ active, action }: ActiveToggleCellPro
   return (
     <>
       <form ref={formRef} action={action} className="inline-flex items-center">
-  <Switch checked={active} onClick={(e: React.MouseEvent<HTMLButtonElement>) => e.preventDefault()} />
+        <Switch checked={active} onClick={(e: React.MouseEvent<HTMLButtonElement>) => e.preventDefault()} />
         <Button type="submit" variant="outline" size="sm" className="ml-2" onClick={handleSubmit}>
           Guardar
         </Button>
@@ -49,14 +49,20 @@ export default function ActiveToggleCell({ active, action }: ActiveToggleCellPro
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Desactivar usuario</AlertDialogTitle>
+            <AlertDialogTitle>
+              Desactivar usuario
+            </AlertDialogTitle>
             <AlertDialogDescription>
               Al desactivar, el usuario no podrá iniciar sesión y las sesiones activas serán cerradas. ¿Deseas continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeactivate}>Desactivar</AlertDialogAction>
+            <AlertDialogCancel asChild>
+              <button type="button">Cancelar</button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <button type="button" onClick={confirmDeactivate}>Desactivar</button>
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

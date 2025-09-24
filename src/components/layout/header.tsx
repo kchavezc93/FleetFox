@@ -5,7 +5,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Bell, UserCircle, Settings, LogOut } from "lucide-react";
 import Link from "next/link";
-import { logoutUser } from "@/lib/actions/auth-actions";
+import { logoutAction } from "@/lib/actions/auth-actions";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,7 +44,7 @@ export function Header() {
                 <span>Configuración</span>
               </Link>
             </DropdownMenuItem>
-            <form action={logoutUser}>
+            <form action={logoutAction}>
               <DropdownMenuItem asChild>
                 <button type="submit" className="w-full flex items-center">
                   <LogOut className="mr-2 h-4 w-4" />

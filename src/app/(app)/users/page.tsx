@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal } from "lucide-react";
 import { UsersExportButtons } from "@/components/users-export";
+import { DeleteUserButton } from "@/components/users/delete-user-button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,7 +34,8 @@ export default async function UserManagementPage() {
   await requirePermission('/users');
   const users = await getUsers();
 
-  async function toggleActive(userId: string, nextActive: boolean) {
+  // Server action compatible with <form action={...}> signature via bound params
+  async function toggleActive(userId: string, nextActive: boolean, _formData: FormData) {
     "use server";
     // Cargar datos actuales para conservar todo salvo 'active'
     const all = await getUsers();
@@ -47,6 +49,12 @@ export default async function UserManagementPage() {
       permissions: target.permissions,
       active: nextActive,
     } as any, userId);
+  }
+
+  // Server action to delete a user, using bound userId to match (formData) signature
+  async function deleteUserAction(userId: string, _formData: FormData) {
+    "use server";
+    await deleteUser(userId);
   }
 
   return (
@@ -139,27 +147,7 @@ export default async function UserManagementPage() {
                               <Link href={`/users/${u.id}/edit`}>Editar</Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
-                              <form action={async () => { "use server"; await deleteUser(u.id); }}>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <button type="button" className="w-full text-left text-red-600">Eliminar</button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Esta acción eliminará al usuario de forma permanente y cerrará sus sesiones activas. ¿Deseas continuar?
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                      <AlertDialogAction asChild>
-                                        <button type="submit" className="text-red-600">Eliminar</button>
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              </form>
+                              <DeleteUserButton action={deleteUserAction.bind(null, u.id)} />
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
