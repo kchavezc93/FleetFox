@@ -43,14 +43,15 @@ function LoginFormInner() {
   async function onSubmit(data: LoginSchema) {
     setIsSubmitting(true);
     try {
-      const result = await loginUser(data);
+  const result = await loginUser(data);
       if (result.success) {
         toast({
           title: "Inicio de Sesión Exitoso",
           description: result.message,
         });
-        const next = searchParams.get('next') || '/dashboard';
-        router.push(next);
+  const nextFromServer = (result as any).redirectUrl as string | undefined;
+  const next = nextFromServer || searchParams.get('next') || '/dashboard';
+  router.push(next);
       } else {
         toast({
           title: "Error de Inicio de Sesión",

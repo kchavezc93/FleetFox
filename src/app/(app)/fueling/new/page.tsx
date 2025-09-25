@@ -6,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { createFuelingLog } from "@/lib/actions/fueling-actions";
 import { Card, CardContent } from "@/components/ui/card";
+import { requirePermission } from "@/lib/authz";
 
 export default async function NewFuelingPage() {
+  await requirePermission('/fueling');
   const vehicles = await getVehicles();
   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
 

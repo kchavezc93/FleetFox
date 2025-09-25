@@ -76,6 +76,9 @@ type SidebarNavProps = {
 export function SidebarNav({ userRole = 'Standard', userPermissions = [] }: SidebarNavProps) {
   const pathname = usePathname();
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({});
+  const perms = React.useMemo(() => new Set((userPermissions || []).map(p => p.toLowerCase())), [userPermissions]);
+  const isAdmin = userRole === 'Admin';
+  const isAllowed = (href: string) => isAdmin || perms.has(href.toLowerCase());
 
   const toggleSubMenu = (labelKey: string) => {
     setOpenSubMenus(prev => ({ ...prev, [labelKey]: !prev[labelKey] }));
@@ -164,12 +167,22 @@ export function SidebarNav({ userRole = 'Standard', userPermissions = [] }: Side
   };
 
 
-  const filteredNavItems = navItemConfigs.map(item => {
-    if (item.key === 'settings' || item.key === 'userManagement') {
-      return { ...item, disabled: userRole !== 'Admin' };
-    }
-    return item;
-  });
+  // Filtrar ítems según permisos. Admin ve todo; estándar ve solo rutas permitidas.
+  const filteredNavItems = navItemConfigs
+    .filter(item => {
+      if (isAdmin) return true;
+      // Mostrar ítem si tiene permiso explícito para su href o para algún subitem (por compatibilidad futura)
+      const allowedParent = isAllowed(item.href);
+      const allowedChild = (item.subItems || []).some(sub => isAllowed(sub.href));
+      return allowedParent || allowedChild;
+    })
+    .map(item => {
+      if (!item.subItems || item.subItems.length === 0) return item;
+      // Si el padre está permitido, mostramos todos los subitems; de lo contrario, solo los subitems permitidos
+      if (isAllowed(item.href)) return item;
+      const allowedSubs = (item.subItems || []).filter(sub => isAllowed(sub.href));
+      return { ...item, subItems: allowedSubs };
+    });
 
   return (
     <SidebarMenu>

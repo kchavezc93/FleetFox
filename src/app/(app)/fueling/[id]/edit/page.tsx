@@ -51,6 +51,7 @@ export default async function EditFuelingPage({ params }: { params: { id: string
               responsible: log!.responsible,
               imageUrl: log!.imageUrl,
             }}
+            existingVouchers={(log!.vouchers || []).map(v => ({ id: v.id, fileName: v.fileName, fileContent: v.fileContent }))}
             submitLabel="Guardar Cambios"
           />
         </CardContent>

@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { FuelingFormData, Vehicle } from "@/types";
+import type { FuelingFormData, Vehicle, FuelingVoucher } from "@/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { fuelingLogSchema, type FuelingLogSchema } from "@/lib/zod-schemas";
@@ -31,23 +31,111 @@ import {
 } from "@/components/ui/form";
 import { CalendarIcon, Save, Loader2, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { VOUCHER_MAX_PER_FUELING } from "@/lib/config";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import React from "react";
+
+// Helpers for voucher compression
+async function readFileAsDataURL(file: File): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    try {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo del voucher'));
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    } catch (e) {
+      reject(e as Error);
+    }
+  });
+}
+
+function base64SizeFromDataUrl(dataUrl: string): number {
+  const i = dataUrl.indexOf('base64,');
+  const b64 = i >= 0 ? dataUrl.substring(i + 7) : '';
+  // Cada 4 chars base64 son 3 bytes
+  return Math.ceil((b64.length * 3) / 4);
+}
+
+async function compressImageToDataUrl(file: File, opts?: { maxEdge?: number; qualityStart?: number; targetMaxBytes?: number; step?: number }): Promise<string> {
+  const { maxEdge = 1600, qualityStart = 0.8, targetMaxBytes = 1_000_000, step = 0.1 } = opts || {};
+  // Cargar imagen
+  const srcDataUrl = await readFileAsDataURL(file);
+  const img = new Image();
+  img.decoding = 'async' as any;
+  const loaded: Promise<void> = new Promise((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('No se pudo cargar la imagen del voucher'));
+  });
+  img.src = srcDataUrl;
+  await loaded;
+
+  // Calcular escala manteniendo aspecto
+  let { width, height } = img;
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  const targetW = Math.max(1, Math.round(width * scale));
+  const targetH = Math.max(1, Math.round(height * scale));
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('No se pudo preparar el lienzo para comprimir la imagen');
+  ctx.drawImage(img, 0, 0, targetW, targetH);
+
+  // Intentar calidades decrecientes hasta cumplir el tamaño objetivo
+  let q = qualityStart;
+  let dataUrl = canvas.toDataURL('image/jpeg', q);
+  let size = base64SizeFromDataUrl(dataUrl);
+  while (size > targetMaxBytes && q > 0.3) {
+    q = Math.max(0.3, q - step);
+    dataUrl = canvas.toDataURL('image/jpeg', q);
+    size = base64SizeFromDataUrl(dataUrl);
+  }
+  return dataUrl;
+}
 
 interface FuelingFormProps {
   vehicles: Vehicle[];
   onSubmitAction: (data: FuelingFormData) => Promise<{ message: string; errors?: any }>;
   initial?: Partial<FuelingFormData> & { id?: string };
   submitLabel?: string;
+  redirectPath?: string; // optional: where to go on success
+  existingVouchers?: Pick<FuelingVoucher, 'id' | 'fileName' | 'fileContent'>[];
 }
 
-export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: FuelingFormProps) {
+export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, redirectPath, existingVouchers }: FuelingFormProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isClient, setIsClient] = React.useState(false);
+  const [pendingVouchers, setPendingVouchers] = React.useState<{ name: string; type: string; content: string }[]>([]);
+  const [toRemoveIds, setToRemoveIds] = React.useState<string[]>([]);
+  const [isProcessingFiles, setIsProcessingFiles] = React.useState(false);
+  const MAX_VOUCHERS = VOUCHER_MAX_PER_FUELING;
+  const existingCount = (existingVouchers?.length || 0);
+  const availableSlots = Math.max(0, MAX_VOUCHERS - (existingCount - toRemoveIds.length) - pendingVouchers.length);
+
+  // Utilidad para rotar imagen base64 90 grados (simple, canvas)
+  async function rotateDataUrl90(dataUrl: string): Promise<string> {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.height;
+        canvas.height = img.width;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('No se pudo preparar el lienzo para rotar.')); return; }
+        ctx.translate(canvas.width/2, canvas.height/2);
+        ctx.rotate(Math.PI / 2);
+        ctx.drawImage(img, -img.width/2, -img.height/2);
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      };
+      img.onerror = () => reject(new Error('No se pudo cargar la imagen para rotar.'));
+      img.src = dataUrl;
+    });
+  }
 
   React.useEffect(() => {
     setIsClient(true);
@@ -65,6 +153,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
       station: initial?.station || "",
       responsible: (initial as any)?.responsible || "",
       imageUrl: initial?.imageUrl || "",
+      // schema tiene defaults para arrays a nivel zod; no es necesario incluir aquí
     },
   });
 
@@ -83,23 +172,24 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
   async function onSubmit(data: FuelingLogSchema) {
     setIsSubmitting(true);
     try {
+      // Validación límite total local
+      const remainingExisting = Math.max(0, (existingVouchers?.length || 0) - toRemoveIds.length);
+      const totalAfter = remainingExisting + pendingVouchers.length;
+      if (totalAfter > MAX_VOUCHERS) {
+        throw new Error(`Solo se permiten ${MAX_VOUCHERS} vouchers por registro.`);
+      }
       const formDataForAction: FuelingFormData = {
         ...data,
         fuelingDate: data.fuelingDate, 
         imageUrl: data.imageUrl || undefined, // Ensure undefined if empty string
-        // newVoucher se setea abajo si el usuario adjunta un archivo
+        // newVouchers y vouchersToRemove se setean abajo
       };
-      // Si hay archivo subido, convertir a base64 Data URI
-      const fileInput = document.getElementById('voucher-file') as HTMLInputElement | null;
-      if (fileInput?.files && fileInput.files[0]) {
-        const file = fileInput.files[0];
-        const buf = await file.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        formDataForAction.newVoucher = {
-          name: file.name,
-          type: file.type || 'application/octet-stream',
-          content: `data:${file.type || 'application/octet-stream'};base64,${b64}`,
-        };
+      // Adjuntar vouchers pendientes y eliminaciones
+      if (pendingVouchers.length > 0) {
+        formDataForAction.newVouchers = pendingVouchers;
+      }
+      if (toRemoveIds.length > 0) {
+        formDataForAction.vouchersToRemove = toRemoveIds;
       }
       const result = await onSubmitAction(formDataForAction);
       toast({
@@ -107,7 +197,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
         description: result.message,
       });
       if (!result.errors) {
-        router.push("/fueling");
+        router.push(redirectPath || "/fueling");
         router.refresh();
       } else {
          Object.entries(result.errors).forEach(([field, message]) => {
@@ -117,7 +207,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
     } catch (error) {
       toast({
         title: "Error",
-        description: "Ocurrió un error inesperado.",
+        description: (error as Error)?.message || "Ocurrió un error inesperado.",
         variant: "destructive",
       });
     } finally {
@@ -170,7 +260,8 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
                         )}
                       >
                         {isClient && field.value ? (
-                          format(field.value, "PPP")
+                          // Renderizar una fecha estable para SSR/CSR evitando formatos locales variables
+                          `${field.value.getFullYear()}-${String(field.value.getMonth()+1).padStart(2,'0')}-${String(field.value.getDate()).padStart(2,'0')}`
                         ) : (
                           <span>Cargando fecha...</span>
                         )}
@@ -179,13 +270,17 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
                     </FormControl>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={field.value}
-                      onSelect={field.onChange}
-                      disabled={(date) => date > new Date()}
-                      initialFocus
-                    />
+                    {isClient && (
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        // Bloquear fechas futuras en el cliente
+                        disabled={(date) => date > new Date()}
+                        // También forzar max date via props if supported by DayPicker patterns
+                        initialFocus
+                      />
+                    )}
                   </PopoverContent>
                 </Popover>
                 <FormMessage />
@@ -275,15 +370,163 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
 
           {/* Campo URL de imagen oculto por ahora: se reemplaza por carga de voucher en BD */}
 
-        <div className="md:col-span-2">
-          <FormLabel className="flex items-center">
-            <ImagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>
-            Voucher (foto) – se almacenará en la BD
-          </FormLabel>
-          <Input id="voucher-file" type="file" accept="image/*" capture="environment" />
-          <FormDescription>
-            Opcional. Puedes tomar una foto del voucher/recibo desde el móvil.
-          </FormDescription>
+        <div className="space-y-3 md:col-span-2">
+          <div>
+            <FormLabel className="flex items-center">
+              <ImagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>
+              Vouchers (fotos) – almacenar en BD
+            </FormLabel>
+            <div className="text-xs text-muted-foreground mb-1">Máximo {MAX_VOUCHERS} por registro. Disponibles: {availableSlots}</div>
+            <Input
+              id="voucher-files"
+              type="file"
+              accept="image/*"
+              multiple
+              capture="environment"
+              onChange={async (e) => {
+                setIsProcessingFiles(true);
+                const chosen = Array.from(e.target.files || []);
+                if (availableSlots <= 0) {
+                  toast({ title: 'Límite alcanzado', description: `Ya no hay espacios disponibles (máximo ${MAX_VOUCHERS}).`, variant: 'destructive' });
+                  e.currentTarget.value = '';
+                  setIsProcessingFiles(false);
+                  return;
+                }
+                const files = chosen.slice(0, availableSlots);
+                const MAX_ORIGINAL_BYTES = 20 * 1024 * 1024;
+                const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+                const prepared: { name: string; type: string; content: string }[] = [];
+                for (const file of files) {
+                  if (file.size > MAX_ORIGINAL_BYTES) {
+                    toast({ title: 'Archivo muy grande', description: `${file.name} supera 20MB.`, variant: 'destructive' });
+                    continue;
+                  }
+                  try {
+                    const dataUrl = file.type.startsWith('image/')
+                      ? await compressImageToDataUrl(file, { maxEdge: 1600, qualityStart: 0.8, targetMaxBytes: 1_000_000, step: 0.1 })
+                      : await readFileAsDataURL(file);
+                    const bytes = base64SizeFromDataUrl(dataUrl);
+                    if (bytes > MAX_UPLOAD_BYTES) {
+                      toast({ title: 'Archivo aún grande', description: `${file.name} sigue siendo muy grande tras comprimir.`, variant: 'destructive' });
+                      continue;
+                    }
+                    prepared.push({ name: file.name, type: file.type || 'application/octet-stream', content: dataUrl });
+                  } catch (err) {
+                    toast({ title: 'Error al procesar', description: `${file.name}: ${(err as Error).message}` , variant: 'destructive' });
+                  }
+                }
+                setPendingVouchers((prev) => [...prev, ...prepared]);
+                // Limpiar input para permitir re-selección del mismo archivo
+                e.currentTarget.value = '';
+                setIsProcessingFiles(false);
+                if (chosen.length > files.length) {
+                  toast({ title: 'Se limitaron archivos', description: `Solo se agregaron ${files.length} archivo(s) por el límite de ${MAX_VOUCHERS}.`, variant: 'default' });
+                }
+              }}
+            />
+            {/* Drag & drop sencillo */}
+            <div
+              className="mt-2 border-2 border-dashed rounded p-3 text-xs text-muted-foreground"
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={async (e) => {
+                e.preventDefault(); e.stopPropagation();
+                const chosen = Array.from(e.dataTransfer?.files || []);
+                if (chosen.length === 0) return;
+                if (availableSlots <= 0) {
+                  toast({ title: 'Límite alcanzado', description: `Ya no hay espacios disponibles (máximo ${MAX_VOUCHERS}).`, variant: 'destructive' });
+                  return;
+                }
+                const dtFiles = chosen.slice(0, availableSlots);
+                setIsProcessingFiles(true);
+                const MAX_ORIGINAL_BYTES = 20 * 1024 * 1024;
+                const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+                const prepared: { name: string; type: string; content: string }[] = [];
+                for (const file of dtFiles) {
+                  if (file.size > MAX_ORIGINAL_BYTES) { continue; }
+                  try {
+                    const dataUrl = file.type.startsWith('image/')
+                      ? await compressImageToDataUrl(file, { maxEdge: 1600, qualityStart: 0.8, targetMaxBytes: 1_000_000, step: 0.1 })
+                      : await readFileAsDataURL(file);
+                    const bytes = base64SizeFromDataUrl(dataUrl);
+                    if (bytes > MAX_UPLOAD_BYTES) { continue; }
+                    prepared.push({ name: file.name, type: file.type || 'application/octet-stream', content: dataUrl });
+                  } catch {}
+                }
+                setPendingVouchers((prev) => [...prev, ...prepared]);
+                setIsProcessingFiles(false);
+                if (chosen.length > dtFiles.length) {
+                  toast({ title: 'Se limitaron archivos', description: `Solo se agregaron ${dtFiles.length} archivo(s) por el límite de ${MAX_VOUCHERS}.`, variant: 'default' });
+                }
+              }}
+            >
+              Arrastra imágenes aquí para agregarlas
+            </div>
+            <FormDescription>
+              Opcional. Puedes tomar o arrastrar varias fotos del voucher/recibo.
+            </FormDescription>
+            {isProcessingFiles && (
+              <div className="text-xs text-muted-foreground">Procesando imágenes…</div>
+            )}
+          </div>
+
+          {/* Vouchers existentes (solo en edición) */}
+          {existingVouchers && existingVouchers.length > 0 && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-2">Vouchers existentes</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {existingVouchers.map((v) => {
+                  const checked = toRemoveIds.includes(v.id);
+                  return (
+                    <div key={v.id} className={cn("border rounded overflow-hidden", checked && 'opacity-60 ring-2 ring-destructive/50') }>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={v.fileContent} alt={v.fileName} className="w-full h-28 object-cover" />
+                      <div className="p-2 flex items-center justify-between gap-2">
+                        <div className="text-xs truncate" title={v.fileName}>{v.fileName}</div>
+                        <label className="text-xs inline-flex items-center gap-1 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            className="h-3 w-3"
+                            checked={checked}
+                            onChange={(e) => {
+                              setToRemoveIds((prev) => e.target.checked ? [...prev, v.id] : prev.filter((id) => id !== v.id));
+                            }}
+                          />
+                          Eliminar
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Vouchers nuevos seleccionados (previews locales) */}
+          {pendingVouchers.length > 0 && (
+            <div>
+              <div className="text-sm text-muted-foreground mb-2">Vouchers a agregar</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {pendingVouchers.map((pv, idx) => (
+                  <div key={`${pv.name}-${idx}`} className="border rounded overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={pv.content} alt={pv.name} className="w-full h-28 object-cover" />
+                    <div className="p-2 flex items-center justify-between gap-2">
+                      <div className="text-xs truncate" title={pv.name}>{pv.name}</div>
+                      <div className="flex items-center gap-2">
+                        <button type="button" className="text-xs underline" onClick={async () => {
+                          try {
+                            const rotated = await rotateDataUrl90(pv.content);
+                            setPendingVouchers((prev) => prev.map((x, i) => i === idx ? { ...x, content: rotated } : x));
+                          } catch {}
+                        }}>Rotar</button>
+                        <button type="button" className="text-xs text-destructive" onClick={() => setPendingVouchers((prev) => prev.filter((_, i) => i !== idx))}>Quitar</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         
         <div className="flex justify-end pt-6 border-t">

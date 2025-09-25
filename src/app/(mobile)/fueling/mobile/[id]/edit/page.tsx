@@ -1,0 +1,43 @@
+import { requirePermission } from "@/lib/authz";
+import { getFuelingLogById, updateFuelingLog } from "@/lib/actions/fueling-actions";
+import { getVehicles } from "@/lib/actions/vehicle-actions";
+import { FuelingForm } from "@/components/fueling-form";
+import { notFound } from "next/navigation";
+
+export default async function MobileFuelingEditPage({ params }: { params: { id: string } }) {
+  await requirePermission('/fueling-mobile');
+  const [log, vehicles] = await Promise.all([
+    getFuelingLogById(params.id),
+    getVehicles(),
+  ]);
+  if (!log) notFound();
+  const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+
+  async function submit(data: any) {
+    "use server";
+    return await updateFuelingLog(params.id, data);
+  }
+
+  return (
+    <div className="max-w-md mx-auto p-4">
+      <FuelingForm
+        vehicles={activeVehicles}
+        onSubmitAction={submit as any}
+        redirectPath={`/fueling/mobile/${params.id}`}
+        initial={{
+          vehicleId: log!.vehicleId,
+          fuelingDate: new Date(log!.fuelingDate + 'T00:00:00'),
+          mileageAtFueling: log!.mileageAtFueling,
+          quantityLiters: log!.quantityLiters,
+          costPerLiter: log!.costPerLiter,
+          totalCost: log!.totalCost,
+          station: log!.station,
+          responsible: log!.responsible,
+          imageUrl: log!.imageUrl,
+        }}
+        existingVouchers={(log!.vouchers || []).map(v => ({ id: v.id, fileName: v.fileName, fileContent: v.fileContent }))}
+        submitLabel="Guardar"
+      />
+    </div>
+  );
+}

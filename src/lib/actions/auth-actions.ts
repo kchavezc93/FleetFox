@@ -12,6 +12,20 @@ import { randomBytes } from 'crypto'; // Para generar tokens de sesión seguros
 import { z } from 'zod';
 import { recordAuditEvent } from '@/lib/actions/audit-actions';
 
+function isSecureCookieEnabled() {
+  try {
+    const env: any = (globalThis as any)?.process?.env || {};
+    if (typeof env.SESSION_COOKIE_SECURE === 'string') {
+      const v = env.SESSION_COOKIE_SECURE.toLowerCase();
+      if (v === 'true') return true;
+      if (v === 'false') return false;
+    }
+    return env.NODE_ENV === 'production';
+  } catch {
+    return false;
+  }
+}
+
 // PRODUCCIÓN: Consideraciones de seguridad para la autenticación:
 // - Usar HTTPS en todo momento.
 // - Almacenar contraseñas hasheadas y salteadas (bcrypt es una buena opción).
@@ -73,7 +87,7 @@ export async function loginUser(data: LoginSchema) {
         await cleanupUserReq.query('DELETE FROM sessions WHERE userId = @userIdForCleanup');
       } catch { /* noop */ }
 
-      // Crear sesión (DB + Cookie HttpOnly)
+  // Crear sesión (DB + Cookie HttpOnly)
       const token = randomBytes(32).toString('hex');
   const ttlDays = Number(((globalThis as any)?.process?.env?.SESSION_TTL_DAYS) ?? 7);
       const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
@@ -88,11 +102,29 @@ export async function loginUser(data: LoginSchema) {
       `);
 
       const cookieStore = await cookies();
+      const secureCookies = isSecureCookieEnabled();
       cookieStore.set({
         name: 'session_token',
         value: token,
         httpOnly: true,
-  secure: (((globalThis as any)?.process?.env?.NODE_ENV) === 'production'), // En desarrollo, permitir cookies no seguras
+        secure: secureCookies, // Configurable via SESSION_COOKIE_SECURE; por defecto true en producción
+        sameSite: 'lax',
+        path: '/',
+        expires: expiresAt,
+      });
+
+  // Establecer el alcance de permisos en cookie para middleware (kiosk fuel only)
+  let permissions: string[] = [];
+  try { permissions = userFromDb.permissions ? JSON.parse(userFromDb.permissions) : []; } catch {}
+  const permsLower = Array.isArray(permissions) ? permissions.map((p: string) => (p || '').toLowerCase()) : [];
+  const allAreFuelingMobile = permsLower.length > 0 && permsLower.every((p: string) => p === '/fueling-mobile');
+  const allAreLegacyFueling = permsLower.length > 0 && permsLower.every((p: string) => p === '/fueling');
+  const isFuelingOnly = allAreFuelingMobile || allAreLegacyFueling;
+      cookieStore.set({
+        name: 'perm_scope',
+        value: isFuelingOnly ? 'fueling-only' : 'standard',
+        httpOnly: true,
+        secure: secureCookies,
         sameSite: 'lax',
         path: '/',
         expires: expiresAt,
@@ -103,7 +135,8 @@ export async function loginUser(data: LoginSchema) {
       return {
         success: true,
         message: "Inicio de sesión exitoso.",
-      };
+        redirectUrl: isFuelingOnly ? '/fueling/mobile' : '/dashboard',
+      } as any;
     } catch (error) {
       console.error(`[SQL Server Error] Error durante el inicio de sesión para ${data.email}:`, error);
       return {

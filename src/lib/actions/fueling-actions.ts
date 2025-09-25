@@ -6,6 +6,9 @@ import { fuelingLogSchema } from "@/lib/zod-schemas";
 import { revalidatePath } from "next/cache";
 import { getDbClient } from "@/lib/db";
 import sql from 'mssql'; // Descomentar si se instala y usa 'mssql'
+import { toUtcMidnight } from "@/lib/utils";
+import { VOUCHER_MAX_PER_FUELING } from "@/lib/config";
+import { getVoucherMaxPerFueling } from "@/lib/server-config";
 import { getCurrentUser } from "@/lib/auth/session";
 
 const LITERS_PER_GALLON = 3.78541;
@@ -32,6 +35,16 @@ export async function createFuelingLog(formData: FuelingFormData) {
     };
   }
   const data = validatedFields.data;
+  // Normalizar fecha a medianoche UTC y bloquear fechas futuras
+  const fuelingDateUtc = toUtcMidnight(data.fuelingDate);
+  const todayUtc = toUtcMidnight(new Date());
+  if (fuelingDateUtc > todayUtc) {
+    return {
+      errors: { fuelingDate: "La fecha de carga no puede ser futura." },
+      message: "Fecha inválida: no se permiten fechas futuras.",
+      success: false,
+    };
+  }
   // PRODUCCIÓN: logger.info({ action: 'createFuelingLog', dbType: dbClient.type, vehicleId: data.vehicleId }, "Attempting to create fueling log");
   
   // --- EJEMPLO DE LÓGICA DE PRODUCCIÓN PARA SQL SERVER (IMPLEMENTACIÓN REAL NECESARIA) ---
@@ -66,7 +79,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
       
       const prevLogRequest = transaction.request(); 
       prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), data.vehicleId);
-      prevLogRequest.input('prev_fuelingDate_eff', sql.Date, data.fuelingDate); 
+  prevLogRequest.input('prev_fuelingDate_eff', sql.Date, fuelingDateUtc); 
       const prevLogResult = await prevLogRequest.query(`
           SELECT TOP 1 mileageAtFueling, quantityLiters 
           FROM fueling_logs 
@@ -86,7 +99,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
       const logRequest = transaction.request(); 
       logRequest.input('fl_vehicleId', sql.NVarChar(50), data.vehicleId);
       logRequest.input('fl_vehiclePlateNumber', sql.NVarChar(50), vehiclePlateNumber); 
-      logRequest.input('fl_fuelingDate', sql.Date, data.fuelingDate); 
+  logRequest.input('fl_fuelingDate', sql.Date, fuelingDateUtc); 
       logRequest.input('fl_mileageAtFueling', sql.Int, data.mileageAtFueling);
       logRequest.input('fl_quantityLiters', sql.Decimal(10, 2), data.quantityLiters);
       logRequest.input('fl_costPerLiter', sql.Decimal(10, 2), data.costPerLiter);
@@ -121,7 +134,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
           ...data,
           vehiclePlateNumber: vehiclePlateNumber,
           fuelEfficiencyKmPerGallon: fuelEfficiencyKmPerGallon === null ? undefined : fuelEfficiencyKmPerGallon,
-          fuelingDate: data.fuelingDate.toISOString().split('T')[0],
+          fuelingDate: fuelingDateUtc.toISOString().split('T')[0],
           imageUrl: newDbRecord.imageUrl,
           createdAt: new Date(newDbRecord.createdAt).toISOString(),
       updatedAt: new Date(newDbRecord.updatedAt).toISOString(),
@@ -136,10 +149,27 @@ export async function createFuelingLog(formData: FuelingFormData) {
           await updateVehicleRequest.query(`UPDATE vehicles SET currentMileage = @upd_v_mileage_val, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @upd_v_id_mileage`);
       }
 
-      // Guardar voucher si viene en el payload
-      if ((formData as any).newVoucher?.content) {
-          const nv = (formData as any).newVoucher as { name: string; type: string; content: string };
-          const base64 = nv.content.split(',')[1] || '';
+      // Guardar vouchers si vienen en el payload (múltiples o legado)
+      const newVouchers = (formData as any).newVouchers as { name: string; type: string; content: string }[] | undefined;
+      // Seguridad: limitar máximo de vouchers totales a 2 por registro
+      if (Array.isArray(newVouchers) && newVouchers.length > 0) {
+        const MAX = await getVoucherMaxPerFueling().catch(() => VOUCHER_MAX_PER_FUELING);
+        const cntReq = transaction.request();
+        cntReq.input('logIdCount', sql.Int, parseInt(newLog.id, 10));
+        const cntRes = await cntReq.query(`
+          SELECT COUNT(1) AS c FROM fueling_vouchers WHERE fueling_log_id = @logIdCount
+        `);
+        const existingCount = cntRes.recordset?.[0]?.c ? parseInt(cntRes.recordset[0].c, 10) : 0;
+        const allowed = Math.max(0, MAX - existingCount);
+        if (allowed <= 0) {
+          // Ignorar adicionales
+        } else if (newVouchers.length > allowed) {
+          newVouchers.splice(allowed); // recortar
+        }
+      }
+      if (Array.isArray(newVouchers) && newVouchers.length > 0) {
+        for (const nv of newVouchers) {
+          const base64 = (nv.content || '').split(',')[1] || '';
           const buffer = Buffer.from(base64, 'base64');
           const voucherReq = transaction.request();
           voucherReq.input('v_log_id', sql.Int, parseInt(newLog.id, 10));
@@ -154,11 +184,31 @@ export async function createFuelingLog(formData: FuelingFormData) {
             INSERT INTO fueling_vouchers (fueling_log_id, file_name, file_type, file_content, created_at)
             VALUES (@v_log_id, @v_name, @v_type, @v_content, GETDATE());
           `);
+        }
+      } else if ((formData as any).newVoucher?.content) {
+        // Compatibilidad hacia atrás con un solo voucher
+        const nv = (formData as any).newVoucher as { name: string; type: string; content: string };
+        const base64 = nv.content.split(',')[1] || '';
+        const buffer = Buffer.from(base64, 'base64');
+        const voucherReq = transaction.request();
+        voucherReq.input('v_log_id', sql.Int, parseInt(newLog.id, 10));
+        voucherReq.input('v_name', sql.NVarChar(200), nv.name);
+        voucherReq.input('v_type', sql.NVarChar(100), nv.type);
+        voucherReq.input('v_content', sql.VarBinary(sql.MAX), buffer);
+        await voucherReq.query(`
+          IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+          BEGIN
+            RAISERROR('Tabla fueling_vouchers no existe. Aplique la migración SQL.', 16, 1);
+          END
+          INSERT INTO fueling_vouchers (fueling_log_id, file_name, file_type, file_content, created_at)
+          VALUES (@v_log_id, @v_name, @v_type, @v_content, GETDATE());
+        `);
       }
       
       await transaction.commit();
       // PRODUCCIÓN: logger.info({ action: 'createFuelingLog', logId: newLog.id, vehicleId: newLog.vehicleId }, "Fueling log created successfully");
-      revalidatePath("/fueling");
+  revalidatePath("/fueling");
+  revalidatePath("/fueling/mobile");
       revalidatePath("/vehicles"); 
       revalidatePath(`/vehicles/${data.vehicleId}`);
       revalidatePath("/reports/fuel-consumption"); 
@@ -422,6 +472,16 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
   }
   const pool = (dbClient as any).pool as sql.ConnectionPool;
   const data = validatedFields.data;
+  // Normalizar fecha a medianoche UTC y bloquear fechas futuras
+  const fuelingDateUtc = toUtcMidnight(data.fuelingDate);
+  const todayUtc = toUtcMidnight(new Date());
+  if (fuelingDateUtc > todayUtc) {
+    return {
+      errors: { fuelingDate: "La fecha de carga no puede ser futura." },
+      message: 'Fecha inválida: no se permiten fechas futuras.',
+      success: false,
+    };
+  }
 
   const transaction = new sql.Transaction(pool);
   try {
@@ -433,7 +493,7 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     let fuelEfficiencyKmPerGallon: number | null = null;
     const prevLogRequest = transaction.request();
     prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), data.vehicleId);
-    prevLogRequest.input('prev_fuelingDate_eff', sql.Date, data.fuelingDate);
+  prevLogRequest.input('prev_fuelingDate_eff', sql.Date, fuelingDateUtc);
     prevLogRequest.input('currentId', sql.NVarChar(50), id);
     const prevLogResult = await prevLogRequest.query(`
       SELECT TOP 1 mileageAtFueling, quantityLiters
@@ -460,7 +520,7 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     const updReq = transaction.request();
     updReq.input('id_upd', sql.NVarChar(50), id);
     updReq.input('vId', sql.NVarChar(50), data.vehicleId);
-    updReq.input('date', sql.Date, data.fuelingDate);
+  updReq.input('date', sql.Date, fuelingDateUtc);
     updReq.input('mileage', sql.Int, data.mileageAtFueling);
     updReq.input('liters', sql.Decimal(10, 2), data.quantityLiters);
     updReq.input('cpl', sql.Decimal(10, 2), data.costPerLiter);
@@ -500,8 +560,55 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
       `);
     }
 
-    // Guardar voucher si viene en el payload
-    if ((formData as any).newVoucher?.content) {
+    // Eliminar vouchers existentes marcados
+    const vouchersToRemove = (formData as any).vouchersToRemove as string[] | undefined;
+    if (Array.isArray(vouchersToRemove) && vouchersToRemove.length > 0) {
+      const delReq = transaction.request();
+      delReq.input('ids_csv', sql.NVarChar(sql.MAX), vouchersToRemove.join(','));
+      await delReq.query(`
+        IF EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+        BEGIN
+          DELETE FROM fueling_vouchers WHERE id IN (SELECT TRY_CAST(value AS INT) FROM STRING_SPLIT(@ids_csv, ',') WHERE TRY_CAST(value AS INT) IS NOT NULL);
+        END
+      `);
+    }
+
+    // Guardar vouchers nuevos si vienen en el payload (múltiples o legado)
+    const newVouchers = (formData as any).newVouchers as { name: string; type: string; content: string }[] | undefined;
+    // Seguridad: respetar máximo 2 incluyendo los existentes restantes
+    if (Array.isArray(newVouchers) && newVouchers.length > 0) {
+      const MAX = await getVoucherMaxPerFueling().catch(() => VOUCHER_MAX_PER_FUELING);
+      const cntReq = transaction.request();
+      cntReq.input('logIdCount', sql.Int, parseInt(id, 10));
+      const cntRes = await cntReq.query(`SELECT COUNT(1) AS c FROM fueling_vouchers WHERE fueling_log_id = @logIdCount`);
+  const existingCount = cntRes.recordset?.[0]?.c ? parseInt(cntRes.recordset[0].c, 10) : 0;
+      const allowed = Math.max(0, MAX - existingCount);
+      if (allowed <= 0) {
+        newVouchers.length = 0;
+      } else if (newVouchers.length > allowed) {
+        newVouchers.splice(allowed);
+      }
+    }
+    if (Array.isArray(newVouchers) && newVouchers.length > 0) {
+      for (const nv of newVouchers) {
+        const base64 = (nv.content || '').split(',')[1] || '';
+        const buffer = Buffer.from(base64, 'base64');
+        const voucherReq = transaction.request();
+        voucherReq.input('v_log_id', sql.Int, parseInt(id, 10));
+        voucherReq.input('v_name', sql.NVarChar(200), nv.name);
+        voucherReq.input('v_type', sql.NVarChar(100), nv.type);
+        voucherReq.input('v_content', sql.VarBinary(sql.MAX), buffer);
+        await voucherReq.query(`
+          IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+          BEGIN
+            RAISERROR('Tabla fueling_vouchers no existe. Aplique la migración SQL.', 16, 1);
+          END
+          INSERT INTO fueling_vouchers (fueling_log_id, file_name, file_type, file_content, created_at)
+          VALUES (@v_log_id, @v_name, @v_type, @v_content, GETDATE());
+        `);
+      }
+    } else if ((formData as any).newVoucher?.content) {
+      // Compatibilidad hacia atrás
       const nv = (formData as any).newVoucher as { name: string; type: string; content: string };
       const base64 = nv.content.split(',')[1] || '';
       const buffer = Buffer.from(base64, 'base64');
@@ -522,6 +629,9 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
 
     await transaction.commit();
     revalidatePath('/fueling');
+    // Revalidate detail view and mobile route to reflect latest vouchers
+    revalidatePath(`/fueling/${id}`);
+    revalidatePath('/fueling/mobile');
     revalidatePath('/reports/fuel-consumption');
     revalidatePath(`/vehicles/${data.vehicleId}`);
     return { message: 'Registro de combustible actualizado.', success: true };
@@ -529,6 +639,32 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     await transaction.rollback();
     console.error(`[SQL Server Error] updateFuelingLog`, err);
     return { message: 'Error al actualizar el registro.', success: false };
+  }
+}
+
+// Eliminar un voucher individual
+export async function deleteFuelingVoucher(voucherId: string, logId: string) {
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
+    return { message: 'Tipo de BD no soportado o pool no disponible.', success: false };
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  try {
+    const req = pool.request();
+    req.input('vid', sql.Int, parseInt(voucherId, 10));
+    await req.query(`
+      IF EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+      BEGIN
+        DELETE FROM fueling_vouchers WHERE id = @vid;
+      END
+    `);
+    revalidatePath('/fueling');
+    revalidatePath(`/fueling/${logId}`);
+    revalidatePath('/fueling/mobile');
+    return { message: 'Voucher eliminado.', success: true };
+  } catch (err) {
+    console.error(`[SQL Server Error] deleteFuelingVoucher`, err);
+    return { message: 'Error al eliminar el voucher.', success: false };
   }
 }
 

@@ -49,7 +49,9 @@ export const fuelingLogSchema = z.object({
   station: z.string().min(1, "La estación de servicio es obligatoria").max(100, "Nombre de la estación demasiado largo"),
   responsible: z.string().min(1, "El responsable es obligatorio").max(100, "Nombre del responsable demasiado largo"),
   imageUrl: z.string().url("Debe ser una URL válida para la imagen.").optional().or(z.literal('')),
-  newVoucher: z.object({ name: z.string(), type: z.string(), content: z.string() }).optional()
+  // Nuevo: múltiples vouchers y eliminación
+  newVouchers: z.array(newAttachmentSchema).optional().default([]),
+  vouchersToRemove: z.array(z.string()).optional().default([]),
 });
 
 export type FuelingLogSchema = z.infer<typeof fuelingLogSchema>;

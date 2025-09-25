@@ -156,5 +156,7 @@ export type MaintenanceFormData = Omit<MaintenanceLog, "id" | "createdAt" | "veh
 export type FuelingFormData = Omit<FuelingLog, "id" | "createdAt" | "vehiclePlateNumber" | "fuelEfficiencyKmPerGallon" | "fuelingDate" | "imageUrl"> & {
   fuelingDate: Date;
   imageUrl?: string;
-  newVoucher?: NewAttachmentPayload; // Reuse attachment payload shape for voucher
+  // Nuevo: permitir múltiples vouchers nuevos y marcar existentes para eliminar
+  newVouchers?: NewAttachmentPayload[];
+  vouchersToRemove?: string[]; // IDs de vouchers existentes a eliminar
 };

@@ -33,6 +33,7 @@ export default function SettingsPage() {
         icon={SettingsIcon}
       />
       <div className="grid gap-6">
+        <VoucherLimitCard />
         <AlertThresholdsCard />
         <Card>
           <CardHeader>
@@ -75,6 +76,58 @@ import { Card as CardBase } from "@/components/ui/card";
 // Server actions remain the single source of truth behind the API
 // import { loadAlertThresholdsAction, saveAlertThresholdsAction } from "@/lib/actions/settings-actions";
 import { useToast } from "@/hooks/use-toast";
+
+function VoucherLimitCard() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [value, setValue] = useState<number>(2);
+  const { toast } = useToast();
+  useEffect(() => { (async () => {
+    setLoading(true);
+    const res = await fetch("/api/settings/voucher-limit", { cache: "no-store" });
+    const s = res.ok ? await res.json() : null;
+    if (s && s.voucherMaxPerFueling != null) setValue(Number(s.voucherMaxPerFueling));
+    setLoading(false);
+  })(); }, []);
+  async function save() {
+    setSaving(true);
+    const res = await fetch("/api/settings/voucher-limit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ voucherMaxPerFueling: Number(value) })
+    });
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      const d = json?.data;
+      if (d && d.voucherMaxPerFueling != null) setValue(Number(d.voucherMaxPerFueling));
+      toast({ title: "Límite guardado", description: "El máximo de vouchers por registro fue actualizado." });
+    } else {
+      toast({ title: "No se pudo guardar", description: "Revisa la conexión o la existencia de la columna en settings.", variant: "destructive" });
+    }
+    setSaving(false);
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5"/> Límite de Vouchers</CardTitle>
+        <CardDescription>Máximo de vouchers por registro de combustible (servidor).</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-3">
+        {loading ? <p className="text-muted-foreground">Cargando...</p> : (
+          <>
+            <div className="md:col-span-2">
+              <label className="block text-sm mb-1">Máximo por registro</label>
+              <Input type="number" min={1} value={value} onChange={e => setValue(Number(e.target.value))} />
+            </div>
+            <div className="flex items-end justify-end">
+              <Button onClick={save} disabled={saving}>{saving ? 'Guardando...' : 'Guardar'}</Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 function AlertThresholdsCard() {
   const [loading, setLoading] = useState(true);

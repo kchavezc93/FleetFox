@@ -1,0 +1,1 @@
+export const VOUCHER_MAX_PER_FUELING = Number(process.env.NEXT_PUBLIC_VOUCHER_MAX_PER_FUELING ?? process.env.VOUCHER_MAX_PER_FUELING ?? 2);

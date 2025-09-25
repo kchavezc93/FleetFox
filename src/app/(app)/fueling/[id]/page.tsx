@@ -1,13 +1,13 @@
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Fuel } from "lucide-react";
+import { Fuel, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { getFuelingLogById, deleteFuelingLog } from "@/lib/actions/fueling-actions";
 import { requirePermission } from "@/lib/authz";
-import { format } from "date-fns";
 import { formatDateDDMMYYYY } from "@/lib/utils";
+import { VoucherGallery } from "@/components/voucher-gallery";
 
 const LITERS_PER_GALLON = 3.78541;
 
@@ -30,6 +30,11 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
         icon={Fuel}
         actions={
           <div className="flex gap-2">
+            <Link href="/fueling">
+              <Button variant="ghost">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Regresar
+              </Button>
+            </Link>
             <Link href={`/fueling/${log.id}/edit`}>
               <Button variant="outline">Editar</Button>
             </Link>
@@ -79,19 +84,9 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
             <div className="text-sm text-muted-foreground">Responsable</div>
             <div className="font-medium">{log.responsible}</div>
           </div>
-          {/* Se oculta la URL de imagen; se mantiene únicamente la galería de vouchers */}
+          {/* Vista previa con modal/lightbox */}
           {log.vouchers && log.vouchers.length > 0 && (
-            <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground mb-2">Vouchers (almacenados en BD)</div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {log.vouchers.map(v => (
-                  <a key={v.id} href={v.fileContent} download={v.fileName} target="_blank" className="block border rounded overflow-hidden">
-                    <img src={v.fileContent} alt={v.fileName} className="w-full h-32 object-cover" />
-                    <div className="p-1 text-xs truncate">{v.fileName}</div>
-                  </a>
-                ))}
-              </div>
-            </div>
+            <VoucherGallery vouchers={log.vouchers as any} fuelingLogId={log.id} />
           )}
           {(log.createdByUsername || log.createdByUserId) && (
             <div>

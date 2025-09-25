@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useState } from "react";
 import type { Alert } from "@/types";
 import { getAlerts, updateAlertStatus, generateAlerts } from "@/lib/actions/alert-actions";
-import { requirePermission } from "@/lib/authz";
+// Permission enforced in layout; this is a client component for data interactivity.
 
 export default function AlertsPage() {
   // Client page; permission enforced server-side in layout. Optionally, can add a server component wrapper if needed.

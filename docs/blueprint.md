@@ -8,7 +8,13 @@
 - Maintenance Record Submission: Form for submitting information about vehicle maintenance records.
 - Fuel Consumption Report: Show total gallons and cost by vehicle in a date range.
 - Report Export: Allow CSV and Excel data export.
-- AI Maintenance Scheduler: AI tool suggesting optimal times for scheduling vehicle maintenance based on vehicle data. 
+ 
+
+## Database schema (source of truth)
+
+- Single, idempotent script: `docs/db/fleetfox_schema.sql`
+- Run it to create/update all required objects (users, sessions, vehicles, fueling_logs, fueling_vouchers, maintenance_logs, attached_documents, settings, audit_events).
+- Any future DB change must be applied in that unified SQL file. The older fragmented scripts under `docs/sql/` are deprecated and will be removed.
 
 ## Style Guidelines:
 

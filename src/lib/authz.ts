@@ -2,9 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/actions/auth-actions";
+import { cookies } from 'next/headers';
 
 // Require that current user has a given permission key (or is Admin).
-// Keys recommended: "/dashboard", "/vehicles", "/maintenance", "/fueling", "/reports", "/alerts", "/users", "/settings"
+// Keys recommended: "/dashboard", "/vehicles", "/maintenance", "/fueling", "/fueling-mobile", "/reports", "/alerts", "/users", "/settings"
 export async function requirePermission(key: string) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
@@ -26,6 +27,20 @@ export async function requirePermission(key: string) {
   const row = res.recordset[0];
   if (row.role === 'Admin') return;
   const permissions: string[] = row.permissions ? JSON.parse(row.permissions) : [];
-  const allowed = permissions.includes(key);
+  const permsLower = Array.isArray(permissions) ? permissions.map((p: string) => (p || '').toLowerCase()) : [];
+  const keyLower = (key || '').toLowerCase();
+  let allowed = permsLower.includes(keyLower);
+  // Safety net: allow kiosk scope users (perm_scope cookie) into mobile fueling
+  if (!allowed && keyLower === '/fueling-mobile') {
+    if (!allowed) {
+      try {
+        const cookieStore = await cookies();
+        const scope = cookieStore.get('perm_scope')?.value || '';
+        if (scope === 'fueling-only') {
+          allowed = true;
+        }
+      } catch {}
+    }
+  }
   if (!allowed) redirect('/forbidden');
 }

@@ -1,4 +1,5 @@
 
+import { requirePermission } from "@/lib/authz";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/page-header";
 import { CarFront, PlusCircle, PlayCircle, Trash2 } from "lucide-react";
@@ -30,6 +31,7 @@ import VehicleActiveToggleCell from "@/components/vehicles/active-toggle-cell";
 
 
 export default async function VehiclesPage() {
+  await requirePermission('/vehicles');
   const vehicles = await getVehicles(); 
 
   // Server action compatible con <form action={...}> para toggle inline

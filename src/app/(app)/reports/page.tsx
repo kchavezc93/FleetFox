@@ -1,11 +1,13 @@
 
+import { requirePermission } from "@/lib/authz";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart3, Fuel, Wrench, ArrowRight, ListChecks, History, CalendarClock, TrendingUp, BarChartHorizontalBig } from "lucide-react";
 import Link from "next/link";
 
-export default function ReportsPage() {
+export default async function ReportsPage() {
+  await requirePermission('/reports');
   const reports = [
     {
       title: "Informe de Consumo de Combustible",

@@ -32,11 +32,12 @@ import { ConfirmSubmitMenuItem } from "@/components/confirm-submit-menu-item";
 
 const LITERS_PER_GALLON = 3.78541;
 
-export default async function FuelingPage({ searchParams }: { searchParams?: { vehicleId?: string; from?: string; to?: string } }) {
+export default async function FuelingPage({ searchParams }: { searchParams?: Promise<{ vehicleId?: string; from?: string; to?: string }> }) {
   await requirePermission('/fueling');
-  const vehicleId = searchParams?.vehicleId;
-  const from = searchParams?.from;
-  const to = searchParams?.to;
+  const sp = searchParams ? await searchParams : {};
+  const vehicleId = sp?.vehicleId;
+  const from = sp?.from;
+  const to = sp?.to;
   const [logs, vehicles] = await Promise.all([
     vehicleId || from || to ? getFuelingLogsFiltered({ vehicleId, from, to }) : getFuelingLogs(),
     getVehicles(),

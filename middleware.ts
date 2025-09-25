@@ -19,6 +19,7 @@ export function middleware(req: NextRequest) {
 
   // Verificar cookie de sesión
   const token = req.cookies.get('session_token')?.value;
+  const permScope = req.cookies.get('perm_scope')?.value || 'standard';
   if (!token) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
@@ -26,6 +27,18 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
   
+  // Redirección kiosk: si es "fueling-only" y no está en rutas móviles, mandarlo a /fueling/mobile
+  if (permScope === 'fueling-only') {
+    const allowedPrefixes = ['/fueling/mobile', '/_next', '/favicon.ico', '/api', '/forbidden'];
+    const isAllowed = allowedPrefixes.some(p => pathname.startsWith(p));
+    if (!isAllowed) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/fueling/mobile';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Si hay cookie, permitimos y la validación fuerte ocurrirá en el layout del servidor
   return NextResponse.next();
 }

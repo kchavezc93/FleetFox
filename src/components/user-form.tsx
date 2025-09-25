@@ -186,6 +186,7 @@ export function UserForm({ mode, initial, onSubmitAction }: UserFormProps) {
                       { key: "/vehicles", label: "Vehículos" },
                       { key: "/maintenance", label: "Mantenimiento" },
                       { key: "/fueling", label: "Combustible" },
+                      { key: "/fueling-mobile", label: "Combustible (Móvil)" },
                       { key: "/reports", label: "Reportes" },
                       { key: "/alerts", label: "Alertas" },
                       { key: "/users", label: "Usuarios" },

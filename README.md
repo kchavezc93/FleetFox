@@ -52,17 +52,30 @@ Scripts disponibles en `package.json`:
 
 ## Esquema de Base de Datos (fuente única)
 
-Usa los scripts SQL en `docs/` como fuente de verdad del esquema. Allí se definen tablas, índices y triggers necesarios para:
+La fuente de verdad del esquema está unificada en un solo script idempotente:
 
-- users, sessions
-- vehicles
-- fueling_logs
-- maintenance_logs
-- attached_documents
-- alerts y settings (umbrales)
-- vehicle_documents (vencimiento de documentos)
+- `docs/db/fleetfox_schema.sql`
 
-Evita duplicar definiciones de tablas en el README; cualquier cambio debe ir a los archivos de `docs/` (por ejemplo, `alerts-schema.sql`, `settings-schema.sql`, `documents-schema.sql`).
+Ese archivo crea/actualiza todas las tablas, índices y restricciones requeridas por la app (users, sessions, vehicles, fueling_logs, fueling_vouchers, maintenance_logs, attached_documents, settings, audit_events). Cualquier cambio futuro del esquema debe realizarse ahí.
+
+Cómo aplicarlo (opciones):
+
+- SSMS/Azure Data Studio: abre `docs/db/fleetfox_schema.sql` conectado a tu base de datos y ejecútalo.
+- PowerShell con sqlcmd (usuario/contraseña):
+
+```powershell
+sqlcmd -S your-sql-host,1433 -d YourDatabase -U your_user -P your_password -b -i "docs\db\fleetfox_schema.sql"
+```
+
+- PowerShell con autenticación integrada (Trusted Connection):
+
+```powershell
+sqlcmd -S .\SQLEXPRESS -d FleetFox -E -b -i "docs\db\fleetfox_schema.sql"
+```
+
+Notas
+- El script es idempotente: puedes ejecutarlo múltiples veces sin duplicar objetos.
+- Incluye la columna `settings.voucher_max_per_fueling` y si `settings` está vacío, inserta una fila inicial con `voucher_max_per_fueling = 2`.
 
 ### Fallback local para configuración de BD
 
@@ -275,7 +288,7 @@ Pendiente
 - Tests (unitarios e integración) para acciones críticas
 
 Fuente única de tablas/esquema
-- `docs/*.sql` (no duplicar en otros documentos)
+- `docs/db/fleetfox_schema.sql` (no duplicar en otros documentos)
 
 Recomendaciones
 - Añadir presets adicionales de fechas por “trimestre” y “año fiscal” si aplica
