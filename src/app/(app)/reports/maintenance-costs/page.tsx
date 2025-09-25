@@ -1,5 +1,5 @@
 
-"use client"; // Client for interactions; data is aggregated server-side
+"use client"; // Client for interactions; data fetched via API endpoints
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,7 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { getMaintenanceCostSummary } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
+// Fetch data via API routes to avoid importing server actions into client components
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -78,14 +77,20 @@ export default function MaintenanceCostsReportPage() {
       try {
         // Load vehicles (once)
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
-        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
-        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
-        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
-        const data = await getMaintenanceCostSummary(params);
+
+        const params = new URLSearchParams();
+        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+
+        const res = await fetch(`/api/reports/maintenance-costs?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const data: MaintenanceCostSummary[] = await res.json();
         setSummaries(data);
       } catch (error) {
         console.error("Error loading maintenance costs report data:", error);
@@ -223,8 +228,8 @@ export default function MaintenanceCostsReportPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Resumen por Vehículo</CardTitle>
-          <CardDescription>Costos totales de mantenimiento por vehículo. Los datos se mostrarán una vez implementada la conexión y lógica de base de datos.</CardDescription>
+          <CardTitle className="text-2xl">Resumen por Vehículo</CardTitle>
+          <CardDescription>Costos totales de mantenimiento por vehículo, filtrables por rango de fechas y vehículo.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -232,15 +237,15 @@ export default function MaintenanceCostsReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de mantenimiento disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead className="text-right">Costo Preventivo (C$)</TableHead>
-                  <TableHead className="text-right">Costo Correctivo (C$)</TableHead>
-                  <TableHead className="text-right">Costo Total (C$)</TableHead>
-                  <TableHead className="text-right">Núm. Registros</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Preventivo (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Correctivo (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Total (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Núm. Registros</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

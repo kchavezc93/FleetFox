@@ -1,5 +1,5 @@
 
-"use client"; // Client for interactions; aggregation is server-side
+"use client"; // Client for interactions; data fetched via API endpoints
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,6 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { getOverallVehicleCostsSummary } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -76,16 +74,19 @@ export default function OverallVehicleCostsReportPage() {
       setIsLoading(true);
       try {
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
-        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
-        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
-        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
-        const data = await getOverallVehicleCostsSummary(params);
-        const filtered = data.filter(s => s.fuelingLogCount > 0 || s.maintenanceLogCount > 0);
-        setSummaries(filtered);
+        const params = new URLSearchParams();
+        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+        const res = await fetch(`/api/reports/overall-costs?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const data: OverallVehicleCostSummary[] = await res.json();
+        setSummaries(data.filter(s => s.fuelingLogCount > 0 || s.maintenanceLogCount > 0));
       } catch (error) {
         console.error("Error loading overall vehicle costs report data:", error);
         setSummaries([]);
@@ -219,9 +220,9 @@ export default function OverallVehicleCostsReportPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Resumen de Costos por Vehículo</CardTitle>
+          <CardTitle className="text-2xl">Resumen de Costos por Vehículo</CardTitle>
           <CardDescription>
-            Costos totales de combustible y mantenimiento. Los datos se mostrarán una vez implementada la conexión y lógica de base de datos.
+            Costos totales de combustible y mantenimiento, filtrables por rango de fechas y vehículo.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -230,14 +231,14 @@ export default function OverallVehicleCostsReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead className="text-right">Costo Combustible (C$)</TableHead>
-                  <TableHead className="text-right">Costo Mantenimiento (C$)</TableHead>
-                  <TableHead className="text-right">Costo Total General (C$)</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Combustible (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Mantenimiento (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Total General (C$)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -258,7 +259,7 @@ export default function OverallVehicleCostsReportPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Visualización de Costos (Marcador de posición)</CardTitle>
+          <CardTitle className="text-xl">Visualización de Costos (Marcador de posición)</CardTitle>
           <CardDescription>Gráfico comparativo de costos por vehículo. Funcionalidad pendiente de implementación de base de datos.</CardDescription>
         </CardHeader>
         <CardContent>

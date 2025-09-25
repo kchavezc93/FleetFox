@@ -4,7 +4,7 @@
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { History, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
+import { History, FileDown, Printer } from "lucide-react";
 import { exportToXLSX } from "@/lib/export-excel";
 import type { MaintenanceLog, Vehicle } from "@/types";
 import {
@@ -16,11 +16,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
+import MaintenanceFilters from "@/components/maintenance-filters";
+import { useSearchParams } from "next/navigation";
 
 interface EnrichedMaintenanceLog extends MaintenanceLog {
   vehicleBrand?: string;
@@ -28,15 +29,30 @@ interface EnrichedMaintenanceLog extends MaintenanceLog {
 }
 
 export default function MaintenanceHistoryReportPage() {
+  const searchParams = useSearchParams();
+  const selectedVehicleId = searchParams.get('vehicleId') ?? undefined;
+  const from = searchParams.get('from') ?? undefined;
+  const to = searchParams.get('to') ?? undefined;
   const [enrichedLogs, setEnrichedLogs] = useState<EnrichedMaintenanceLog[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadReportData() {
       setIsLoading(true);
       try {
-        const maintenanceLogsData = await getMaintenanceLogs();
-        const vehiclesData = await getVehicles();
+        const params = new URLSearchParams();
+        if (selectedVehicleId) params.set('vehicleId', selectedVehicleId);
+        if (from) params.set('from', from);
+        if (to) params.set('to', to);
+        const qs = params.toString();
+        const resLogs = await fetch(`/api/maintenance/logs${qs ? `?${qs}` : ''}`, { cache: "no-store" });
+        if (!resLogs.ok) throw new Error(`Error cargando logs: ${resLogs.status}`);
+        const maintenanceLogsData: MaintenanceLog[] = await resLogs.json();
+        const resVehicles = await fetch("/api/vehicles/list", { cache: "no-store" });
+        if (!resVehicles.ok) throw new Error(`Error cargando vehículos: ${resVehicles.status}`);
+        const vehiclesData: Vehicle[] = await resVehicles.json();
+        setVehicles(vehiclesData);
 
         if (maintenanceLogsData.length === 0) {
           setEnrichedLogs([]);
@@ -66,7 +82,7 @@ export default function MaintenanceHistoryReportPage() {
       }
     }
     loadReportData();
-  }, []);
+  }, [selectedVehicleId, from, to]);
 
   const handlePrint = () => {
     window.print();
@@ -81,7 +97,7 @@ export default function MaintenanceHistoryReportPage() {
       ...enrichedLogs.map(log => [
         log.vehiclePlateNumber,
         `${log.vehicleBrand || ''} ${log.vehicleModel || ''}`.trim(),
-        format(new Date(log.executionDate + "T00:00:00"), "PP", { locale: es }),
+  formatDateDDMMYYYY(log.executionDate),
         log.maintenanceType,
         log.mileageAtService.toLocaleString(),
         `C$${log.cost.toFixed(2)}`,
@@ -135,12 +151,7 @@ export default function MaintenanceHistoryReportPage() {
         icon={History}
         actions={
           <div className="page-header-actions flex items-center gap-2">
-            <Button variant="outline" disabled>
-              <CalendarDays className="mr-2 h-4 w-4" /> Rango de Fechas
-            </Button>
-            <Button variant="outline" disabled>
-              <Filter className="mr-2 h-4 w-4" /> Filtros
-            </Button>
+            <MaintenanceFilters vehicles={vehicles} selectedVehicleId={selectedVehicleId ?? undefined} from={from ?? undefined} to={to ?? undefined} />
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
@@ -157,9 +168,9 @@ export default function MaintenanceHistoryReportPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Historial Completo de Mantenimientos</CardTitle>
+          <CardTitle className="text-2xl">Historial Completo de Mantenimientos</CardTitle>
           <CardDescription>
-            Lista de todos los registros de mantenimiento. Los datos se mostrarán una vez implementada la conexión y lógica de base de datos.
+            Lista de todos los registros de mantenimiento en el sistema.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -168,16 +179,16 @@ export default function MaintenanceHistoryReportPage() {
           ) : enrichedLogs.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de mantenimiento disponibles para generar el informe. Verifique la implementación de la base de datos.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead>Fecha Ejecución</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Kilometraje</TableHead>
-                  <TableHead>Costo (C$)</TableHead>
-                  <TableHead>Proveedor</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="font-semibold">Fecha Ejecución</TableHead>
+                  <TableHead className="font-semibold">Tipo</TableHead>
+                  <TableHead className="text-right font-semibold">Kilometraje</TableHead>
+                  <TableHead className="text-right font-semibold">Costo (C$)</TableHead>
+                  <TableHead className="font-semibold">Proveedor</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -185,15 +196,15 @@ export default function MaintenanceHistoryReportPage() {
                   <TableRow key={log.id}>
                     <TableCell className="font-medium">{log.vehiclePlateNumber}</TableCell>
                     <TableCell>{log.vehicleBrand} {log.vehicleModel}</TableCell>
-                    <TableCell>{format(new Date(log.executionDate + "T00:00:00"), "PP", { locale: es })}</TableCell>
+                    <TableCell>{formatDateDDMMYYYY(log.executionDate)}</TableCell>
                     <TableCell>
                       <Badge variant={log.maintenanceType === "Preventivo" ? "default" : "secondary"} 
                              className={log.maintenanceType === "Preventivo" ? "bg-blue-500 text-white" : "bg-orange-500 text-white"}>
                         {log.maintenanceType}
                       </Badge>
                     </TableCell>
-                    <TableCell>{log.mileageAtService.toLocaleString()} km</TableCell>
-                    <TableCell className="text-right">C${log.cost.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{log.mileageAtService.toLocaleString()} km</TableCell>
+                    <TableCell className="text-right font-medium">C${log.cost.toFixed(2)}</TableCell>
                     <TableCell>{log.provider}</TableCell>
                   </TableRow>
                 ))}

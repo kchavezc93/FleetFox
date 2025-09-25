@@ -56,9 +56,8 @@ export async function createVehicle(formData: VehicleFormData) {
       const currentUser = await getCurrentUser();
       const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       const request = pool.request();
-      // Se genera una URL de imagen de marcador de posición. En producción, esto podría ser null
-      // o gestionarse a través de un sistema de subida de archivos.
-      const imageUrl = `https://placehold.co/600x400.png?text=${encodeURIComponent(data.brand + ' ' + data.model)}`;
+  // Imagen por defecto del catálogo local, para homogeneidad visual si no se cargó una imagen
+  const imageUrl = `/images/vehicles/default-vehicle.svg`;
       
       // Verificar si ya existe un vehículo con la misma matrícula o VIN para evitar duplicados.
       // Esto debe hacerse ANTES de intentar la inserción.
@@ -93,17 +92,25 @@ export async function createVehicle(formData: VehicleFormData) {
       insertRequest.input('imageUrl_ins', sql.NVarChar(255), imageUrl);
       // createdAt y updatedAt se manejan con GETDATE() en la consulta SQL.
       const result = await insertRequest.query(`
+        DECLARE @Inserted TABLE (
+          id INT,
+          createdAt DATETIME2,
+          updatedAt DATETIME2,
+          imageUrl NVARCHAR(255)
+        );
         INSERT INTO vehicles (
           plateNumber, vin, brand, model, year, fuelType, currentMileage, 
           nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate, status, 
           createdByUserId, updatedByUserId, createdAt, updatedAt, imageUrl
         )
         OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl 
+        INTO @Inserted
         VALUES (
           @plateNumber_ins, @vin_ins, @brand_ins, @model_ins, @year_ins, @fuelType_ins, @currentMileage_ins, 
           @nextPreventiveMaintenanceMileage_ins, @nextPreventiveMaintenanceDate_ins, @status_ins, 
           ${userIdInt !== null ? userIdInt : 'NULL'}, ${userIdInt !== null ? userIdInt : 'NULL'}, GETDATE(), GETDATE(), @imageUrl_ins
         );
+        SELECT id, createdAt, updatedAt, imageUrl FROM @Inserted;
       `);
       
       if (result.recordset.length === 0 || !result.recordset[0].id) {
@@ -226,6 +233,22 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
       // No actualizamos imageUrl aquí a menos que se provea un mecanismo para cambiarla.
       // updatedAt se maneja con GETDATE() en la consulta SQL.
       const result = await updateRequest.query(`
+        DECLARE @Updated TABLE (
+          id INT,
+          plateNumber NVARCHAR(50),
+          vin NVARCHAR(50),
+          brand NVARCHAR(100),
+          model NVARCHAR(100),
+          year INT,
+          fuelType NVARCHAR(50),
+          currentMileage INT,
+          nextPreventiveMaintenanceMileage INT,
+          nextPreventiveMaintenanceDate DATE,
+          status NVARCHAR(50),
+          createdAt DATETIME2,
+          updatedAt DATETIME2,
+          imageUrl NVARCHAR(255)
+        );
         UPDATE vehicles 
         SET 
           plateNumber = @plateNumber_upd_val, 
@@ -241,7 +264,9 @@ export async function updateVehicle(id: string, formData: VehicleFormData) {
           updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
           updatedAt = GETDATE()
         OUTPUT INSERTED.id, INSERTED.plateNumber, INSERTED.vin, INSERTED.brand, INSERTED.model, INSERTED.year, INSERTED.fuelType, INSERTED.currentMileage, INSERTED.nextPreventiveMaintenanceMileage, INSERTED.nextPreventiveMaintenanceDate, INSERTED.status, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl
+        INTO @Updated
         WHERE id = @id_upd;
+        SELECT * FROM @Updated;
       `);
 
       if (result.recordset.length === 0) {

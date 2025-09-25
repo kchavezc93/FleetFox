@@ -1,4 +1,3 @@
-
 "use client";
 
 import { PageHeader } from "@/components/page-header";
@@ -72,27 +71,59 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card as CardBase } from "@/components/ui/card";
-import { loadAlertThresholdsAction, saveAlertThresholdsAction } from "@/lib/actions/settings-actions";
+// Client components should call an API route instead of server actions directly
+// Server actions remain the single source of truth behind the API
+// import { loadAlertThresholdsAction, saveAlertThresholdsAction } from "@/lib/actions/settings-actions";
+import { useToast } from "@/hooks/use-toast";
 
 function AlertThresholdsCard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ days: 30, km: 2000, lowEff: 10, highMaint: 20000, windowDays: 30 });
+  const { toast } = useToast();
   useEffect(() => { (async () => {
     setLoading(true);
-    const s = await loadAlertThresholdsAction();
+    const res = await fetch("/api/settings/thresholds", { cache: "no-store" });
+    const s = res.ok ? await res.json() : null;
     if (s) setForm({ days: s.daysThreshold ?? 30, km: s.mileageThreshold ?? 2000, lowEff: s.lowEfficiencyThresholdKmPerGallon ?? 10, highMaint: s.highMaintenanceCostThreshold ?? 20000, windowDays: s.maintenanceCostWindowDays ?? 30 });
     setLoading(false);
   })(); }, []);
   async function save() {
     setSaving(true);
-    await saveAlertThresholdsAction({
-      daysThreshold: Number(form.days),
-      mileageThreshold: Number(form.km),
-      lowEfficiencyThresholdKmPerGallon: Number(form.lowEff),
-      highMaintenanceCostThreshold: Number(form.highMaint),
-      maintenanceCostWindowDays: Number(form.windowDays),
+    const res = await fetch("/api/settings/thresholds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        daysThreshold: Number(form.days),
+        mileageThreshold: Number(form.km),
+        lowEfficiencyThresholdKmPerGallon: Number(form.lowEff),
+        highMaintenanceCostThreshold: Number(form.highMaint),
+        maintenanceCostWindowDays: Number(form.windowDays),
+      }),
     });
+    if (res.ok) {
+      const json = await res.json().catch(() => null);
+      const d = json?.data;
+      if (d) {
+        setForm({
+          days: d.daysThreshold ?? form.days,
+          km: d.mileageThreshold ?? form.km,
+          lowEff: d.lowEfficiencyThresholdKmPerGallon ?? form.lowEff,
+          highMaint: d.highMaintenanceCostThreshold ?? form.highMaint,
+          windowDays: d.maintenanceCostWindowDays ?? form.windowDays,
+        });
+      } else {
+        // Fallback: refetch
+        const ref = await fetch("/api/settings/thresholds", { cache: "no-store" });
+        if (ref.ok) {
+          const s = await ref.json();
+          setForm({ days: s.daysThreshold ?? 30, km: s.mileageThreshold ?? 2000, lowEff: s.lowEfficiencyThresholdKmPerGallon ?? 10, highMaint: s.highMaintenanceCostThreshold ?? 20000, windowDays: s.maintenanceCostWindowDays ?? 30 });
+        }
+      }
+      toast({ title: "Umbrales guardados", description: "Los cambios fueron aplicados correctamente." });
+    } else {
+      toast({ title: "No se pudo guardar", description: "Revisa la conexión a la BD o inténtalo más tarde.", variant: "destructive" });
+    }
     setSaving(false);
   }
   return (

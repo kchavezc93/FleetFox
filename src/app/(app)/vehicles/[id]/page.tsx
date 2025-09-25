@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { CarFront, CalendarDays, Gauge, Tag, Fuel, ShieldCheck, AlertTriangle, Edit, Trash2, PlayCircle, PenToolIcon, User as UserIcon } from "lucide-react"; // Changed Tool to PenToolIcon
 import { notFound, redirect } from "next/navigation";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import { VehicleImage } from "@/components/vehicles/vehicle-image";
 
 interface DetailItemProps {
   icon: React.ElementType;
@@ -126,13 +128,12 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="mb-6">
-            <Image
-              src={vehicle.imageUrl || "https://placehold.co/600x400.png"}
+            <VehicleImage
+              src={vehicle.imageUrl}
               alt={`${vehicle.brand} ${vehicle.model}`}
               width={600}
               height={400}
               className="rounded-md object-cover mx-auto shadow-md"
-              data-ai-hint="vehicle car"
             />
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
@@ -161,7 +162,7 @@ export default async function VehicleDetailsPage({ params }: { params: { id: str
             />
             
             <DetailItem icon={Gauge} label="Próx. Mantenimiento (Kilometraje)" value={`${vehicle.nextPreventiveMaintenanceMileage.toLocaleString()} km`} />
-            <DetailItem icon={CalendarDays} label="Próx. Mantenimiento (Fecha)" value={format(new Date(vehicle.nextPreventiveMaintenanceDate + "T00:00:00"), "PPP", { locale: es })} />
+            <DetailItem icon={CalendarDays} label="Próx. Mantenimiento (Fecha)" value={formatDateDDMMYYYY(vehicle.nextPreventiveMaintenanceDate)} />
             
             <DetailItem icon={CalendarDays} label="Fecha de Creación" value={format(new Date(vehicle.createdAt), "PPPp", { locale: es })} />
             <DetailItem icon={CalendarDays} label="Última Actualización" value={format(new Date(vehicle.updatedAt), "PPPp", { locale: es })} />

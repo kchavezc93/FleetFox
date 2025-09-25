@@ -3,12 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Fuel } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { getFuelingLogById, deleteFuelingLog } from "@/lib/actions/fueling-actions";
+import { requirePermission } from "@/lib/authz";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 
 const LITERS_PER_GALLON = 3.78541;
 
 export default async function FuelingDetailsPage({ params }: { params: { id: string } }) {
+  await requirePermission('/fueling');
   const log = await getFuelingLogById(params.id);
   if (!log) {
     return (
@@ -30,13 +34,9 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
               <Button variant="outline">Editar</Button>
             </Link>
             <form action={async () => { "use server"; await deleteFuelingLog(log.id); }}>
-              <Button
-                type="submit"
-                variant="destructive"
-                onClick={(e) => { if (!confirm('¿Eliminar este registro de combustible?')) { e.preventDefault(); } }}
-              >
+              <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este registro de combustible?">
                 Eliminar
-              </Button>
+              </ConfirmSubmitButton>
             </form>
           </div>
         }
@@ -49,7 +49,7 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
   <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4 p-6">
           <div>
             <div className="text-sm text-muted-foreground">Fecha</div>
-            <div className="font-medium">{format(new Date(log.fuelingDate), 'PP')}</div>
+            <div className="font-medium">{formatDateDDMMYYYY(log.fuelingDate)}</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Millaje</div>
@@ -75,10 +75,22 @@ export default async function FuelingDetailsPage({ params }: { params: { id: str
             <div className="text-sm text-muted-foreground">Estación</div>
             <div className="font-medium">{log.station}</div>
           </div>
-          {log.imageUrl && (
+          <div>
+            <div className="text-sm text-muted-foreground">Responsable</div>
+            <div className="font-medium">{log.responsible}</div>
+          </div>
+          {/* Se oculta la URL de imagen; se mantiene únicamente la galería de vouchers */}
+          {log.vouchers && log.vouchers.length > 0 && (
             <div className="md:col-span-2">
-              <div className="text-sm text-muted-foreground">Recibo</div>
-              <a href={log.imageUrl} target="_blank" className="text-primary underline">Ver imagen</a>
+              <div className="text-sm text-muted-foreground mb-2">Vouchers (almacenados en BD)</div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {log.vouchers.map(v => (
+                  <a key={v.id} href={v.fileContent} download={v.fileName} target="_blank" className="block border rounded overflow-hidden">
+                    <img src={v.fileContent} alt={v.fileName} className="w-full h-32 object-cover" />
+                    <div className="p-1 text-xs truncate">{v.fileName}</div>
+                  </a>
+                ))}
+              </div>
             </div>
           )}
           {(log.createdByUsername || log.createdByUserId) && (

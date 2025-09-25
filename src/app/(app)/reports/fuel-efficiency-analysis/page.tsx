@@ -23,8 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { getFuelEfficiencyStats } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import type { Vehicle } from "@/types";
 import Image from "next/image";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -76,14 +74,18 @@ export default function FuelEfficiencyAnalysisPage() {
       setIsLoading(true);
       try {
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
-        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
-        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
-        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
-        const data = await getFuelEfficiencyStats(params);
+        const params = new URLSearchParams();
+        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+        const res = await fetch(`/api/reports/fuel-efficiency?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const data: FuelEfficiencyStats[] = await res.json();
         setEfficiencyData(data.filter(d => d.logCount > 0));
       } catch (error) {
         console.error("Error loading fuel efficiency analysis data:", error);
@@ -212,9 +214,9 @@ export default function FuelEfficiencyAnalysisPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Análisis de Eficiencia por Vehículo</CardTitle>
+          <CardTitle className="text-2xl">Análisis de Eficiencia por Vehículo</CardTitle>
           <CardDescription>
-            Promedio, mínimo y máximo de eficiencia de combustible (km/gal). Los datos se mostrarán una vez implementada la base de datos.
+            Promedio, mínimo y máximo de eficiencia de combustible (km/gal), filtrables por rango de fechas y vehículo.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -223,15 +225,15 @@ export default function FuelEfficiencyAnalysisPage() {
           ) : efficiencyData.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de eficiencia de combustible disponibles o registros de combustible con cálculo de eficiencia. Verifique la implementación de la base de datos y los registros existentes.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead className="text-right">Eficiencia Prom. (km/gal)</TableHead>
-                  <TableHead className="text-right">Eficiencia Mín. (km/gal)</TableHead>
-                  <TableHead className="text-right">Eficiencia Máx. (km/gal)</TableHead>
-                  <TableHead className="text-right">Núm. Registros</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="text-right font-semibold">Eficiencia Prom. (km/gal)</TableHead>
+                  <TableHead className="text-right font-semibold">Eficiencia Mín. (km/gal)</TableHead>
+                  <TableHead className="text-right font-semibold">Eficiencia Máx. (km/gal)</TableHead>
+                  <TableHead className="text-right font-semibold">Núm. Registros</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

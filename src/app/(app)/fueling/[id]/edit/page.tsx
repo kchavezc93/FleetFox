@@ -5,8 +5,12 @@ import { getFuelingLogById, updateFuelingLog } from "@/lib/actions/fueling-actio
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { FuelingForm } from "@/components/fueling-form";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { requirePermission } from "@/lib/authz";
 
 export default async function EditFuelingPage({ params }: { params: { id: string } }) {
+  await requirePermission('/fueling');
   const [log, vehicles] = await Promise.all([
     getFuelingLogById(params.id),
     getVehicles(),
@@ -25,6 +29,11 @@ export default async function EditFuelingPage({ params }: { params: { id: string
         title="Editar Registro de Combustible"
         description={`Vehículo: ${log!.vehiclePlateNumber || log!.vehicleId}`}
         icon={Fuel}
+        actions={
+          <Link href="/fueling">
+            <Button variant="outline">Volver al listado</Button>
+          </Link>
+        }
       />
       <Card className="shadow-lg">
         <CardContent className="p-6">
@@ -39,6 +48,7 @@ export default async function EditFuelingPage({ params }: { params: { id: string
               costPerLiter: log!.costPerLiter,
               totalCost: log!.totalCost,
               station: log!.station,
+              responsible: log!.responsible,
               imageUrl: log!.imageUrl,
             }}
             submitLabel="Guardar Cambios"

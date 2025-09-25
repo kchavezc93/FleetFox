@@ -1,5 +1,5 @@
 
-"use client"; // Client page; data aggregated server-side
+"use client"; // Client page; data fetched via API endpoints
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,8 +24,6 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
-import { getFuelConsumptionSummary } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
@@ -76,16 +74,19 @@ export default function FuelConsumptionReportPage() {
       setIsLoading(true);
       try {
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
-        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
-        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
-        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
-        const data = await getFuelConsumptionSummary(params);
-        const filtered = data.filter(d => d.logCount > 0);
-        setSummaries(filtered);
+        const params = new URLSearchParams();
+        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+        const res = await fetch(`/api/reports/fuel-consumption?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const data: FuelConsumptionSummary[] = await res.json();
+        setSummaries(data.filter(d => d.logCount > 0));
       } catch (error) {
         console.error("Error loading fuel consumption report data:", error);
         setSummaries([]);
@@ -224,8 +225,8 @@ export default function FuelConsumptionReportPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Resumen por Vehículo</CardTitle>
-          <CardDescription>Consumo total de combustible y costos por vehículo. Los datos se mostrarán una vez implementada la conexión y lógica de base de datos.</CardDescription>
+          <CardTitle className="text-2xl">Resumen por Vehículo</CardTitle>
+          <CardDescription>Consumo total de combustible y costos por vehículo, filtrables por rango de fechas y vehículo.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -233,15 +234,15 @@ export default function FuelConsumptionReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de combustible disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead className="text-right">Galones Totales</TableHead>
-                  <TableHead className="text-right">Costo Total (C$)</TableHead>
-                  <TableHead className="text-right">Eficiencia Prom. (km/gal)</TableHead>
-                  <TableHead className="text-right">Núm. Registros</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="text-right font-semibold">Galones Totales</TableHead>
+                  <TableHead className="text-right font-semibold">Costo Total (C$)</TableHead>
+                  <TableHead className="text-right font-semibold">Eficiencia Prom. (km/gal)</TableHead>
+                  <TableHead className="text-right font-semibold">Núm. Registros</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

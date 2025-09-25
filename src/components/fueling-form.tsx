@@ -63,6 +63,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
       costPerLiter: initial?.costPerLiter ?? 0, 
       totalCost: initial?.totalCost ?? 0,
       station: initial?.station || "",
+      responsible: (initial as any)?.responsible || "",
       imageUrl: initial?.imageUrl || "",
     },
   });
@@ -86,7 +87,20 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
         ...data,
         fuelingDate: data.fuelingDate, 
         imageUrl: data.imageUrl || undefined, // Ensure undefined if empty string
+        // newVoucher se setea abajo si el usuario adjunta un archivo
       };
+      // Si hay archivo subido, convertir a base64 Data URI
+      const fileInput = document.getElementById('voucher-file') as HTMLInputElement | null;
+      if (fileInput?.files && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        const buf = await file.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        formDataForAction.newVoucher = {
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          content: `data:${file.type || 'application/octet-stream'};base64,${b64}`,
+        };
+      }
       const result = await onSubmitAction(formDataForAction);
       toast({
         title: "Éxito",
@@ -245,28 +259,32 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel }: 
           />
         </div>
 
-          <FormField<FuelingLogSchema, "imageUrl">
-            control={form.control}
-            name="imageUrl"
-            render={({ field }) => (
-              <FormItem className="md:col-span-2">
-                <FormLabel className="flex items-center">
-                  <ImagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>
-                  URL de Imagen (Recibo)
-                </FormLabel>
-                <FormControl>
-                  <Input 
-                    type="url" 
-                    placeholder="https://ejemplo.com/imagen_recibo.png" 
-                    {...field} 
-                    value={field.value || ""}
-                  />
-                </FormControl>
-                <FormDescription>Opcional. Ingrese la URL de una imagen del recibo de combustible.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <FormField<FuelingLogSchema, "responsible">
+          control={form.control}
+          name="responsible"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Responsable *</FormLabel>
+              <FormControl>
+                <Input placeholder="Nombre de quien registró" {...field} value={field.value} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+          {/* Campo URL de imagen oculto por ahora: se reemplaza por carga de voucher en BD */}
+
+        <div className="md:col-span-2">
+          <FormLabel className="flex items-center">
+            <ImagePlus className="mr-2 h-4 w-4 text-muted-foreground"/>
+            Voucher (foto) – se almacenará en la BD
+          </FormLabel>
+          <Input id="voucher-file" type="file" accept="image/*" capture="environment" />
+          <FormDescription>
+            Opcional. Puedes tomar una foto del voucher/recibo desde el móvil.
+          </FormDescription>
+        </div>
         
         <div className="flex justify-end pt-6 border-t">
           <Button type="submit" disabled={isSubmitting} className="bg-primary hover:bg-primary/90">

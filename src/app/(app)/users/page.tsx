@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PlusCircle } from "lucide-react";
 import Link from "next/link";
 import { getUsers, saveUser, deleteUser } from "@/lib/actions/user-actions";
+import { revalidatePath } from "next/cache";
 import ActiveToggleCell from "@/components/users/active-toggle-cell";
 import { requirePermission } from "@/lib/authz";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +50,7 @@ export default async function UserManagementPage() {
       permissions: target.permissions,
       active: nextActive,
     } as any, userId);
+    revalidatePath('/users');
   }
 
   // Server action to delete a user, using bound userId to match (formData) signature
@@ -130,6 +132,7 @@ export default async function UserManagementPage() {
                           </Badge>
                           <ActiveToggleCell
                             active={(u as any).active ?? true}
+                            userId={u.id}
                             action={toggleActive.bind(null, u.id, !((u as any).active ?? true))}
                           />
                         </div>

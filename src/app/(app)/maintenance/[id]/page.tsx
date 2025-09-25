@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Wrench, CalendarDays,Gauge, Tag, Users, Construction, DollarSign, FileText, Edit, Trash2, Paperclip, FileDown as FileDownIcon, User as UserIcon } from "lucide-react";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import Image from "next/image"; // Next.js Image component
 
 interface DetailItemProps {
@@ -70,7 +72,7 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
     <>
       <PageHeader
         title={`Detalles de Mantenimiento: ${log.vehiclePlateNumber}`}
-        description={`Registro de mantenimiento del ${format(new Date(log.executionDate + "T00:00:00"), "PPP", { locale: es })}.`}
+  description={`Registro de mantenimiento del ${formatDateDDMMYYYY(log.executionDate)}.`}
         icon={Wrench}
         actions={
           <div className="flex items-center gap-2">
@@ -80,9 +82,9 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
               </Button>
             </Link>
             <form action={handleDeleteAction}>
-              <Button variant="destructive" type="submit" onClick={(e) => { if (!confirm('¿Eliminar este registro de mantenimiento?')) { e.preventDefault(); } }}>
+              <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este registro de mantenimiento?">
                 <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-              </Button>
+              </ConfirmSubmitButton>
             </form>
             <Link href="/maintenance">
               <Button variant="outline">Volver a la Lista</Button>
@@ -107,11 +109,11 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
               isBadge 
               badgeClassName={log.maintenanceType === "Preventivo" ? "bg-blue-500 text-white" : "bg-orange-500 text-white"}
             />
-            <DetailItem icon={CalendarDays} label="Fecha de Ejecución" value={format(new Date(log.executionDate + "T00:00:00"), "PPP", { locale: es })} />
+            <DetailItem icon={CalendarDays} label="Fecha de Ejecución" value={formatDateDDMMYYYY(log.executionDate)} />
             <DetailItem icon={Gauge} label="Kilometraje en Servicio" value={`${log.mileageAtService.toLocaleString()} km`} />
             <DetailItem icon={DollarSign} label="Costo" value={`C$${log.cost.toFixed(2)}`} />
             {log.provider && <DetailItem icon={Users} label="Proveedor" value={log.provider} />}
-            {log.nextMaintenanceDateScheduled && <DetailItem icon={CalendarDays} label="Próximo Mantenimiento (Fecha)" value={format(new Date(log.nextMaintenanceDateScheduled + "T00:00:00"), "PPP", { locale: es })} />}
+            {log.nextMaintenanceDateScheduled && <DetailItem icon={CalendarDays} label="Próximo Mantenimiento (Fecha)" value={formatDateDDMMYYYY(log.nextMaintenanceDateScheduled)} />}
             {log.nextMaintenanceMileageScheduled && <DetailItem icon={Gauge} label="Próximo Mantenimiento (Kilometraje)" value={`${log.nextMaintenanceMileageScheduled.toLocaleString()} km`} />}
             <DetailItem icon={CalendarDays} label="Fecha de Creación del Registro" value={format(new Date(log.createdAt), "PPPp", { locale: es })} />
             {log.createdByUsername || log.createdByUserId ? (

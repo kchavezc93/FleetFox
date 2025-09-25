@@ -17,8 +17,7 @@ export async function loadAlertThresholdsAction() {
 				alert_lowEfficiencyThresholdKmPerGallon AS lowEfficiencyThresholdKmPerGallon,
 				alert_highMaintenanceCostThreshold AS highMaintenanceCostThreshold,
 				alert_maintenanceCostWindowDays AS maintenanceCostWindowDays
-			FROM settings
-			ORDER BY updatedAt DESC;
+			FROM settings;
 		`);
 		if (!res.recordset.length) return null;
 		const r = res.recordset[0];
@@ -82,8 +81,27 @@ export async function saveAlertThresholdsAction(payload: {
 		if (hasCreatedBy) { columns.push('createdByUserId'); values.push(userIdInt !== null ? String(userIdInt) : 'NULL'); }
 		if (hasUpdatedBy) { columns.push('updatedByUserId'); values.push(userIdInt !== null ? String(userIdInt) : 'NULL'); }
 
-		const sqlInsert = `INSERT INTO settings (${columns.join(', ')}) VALUES (${values.join(', ')});`;
-		await req.query(sqlInsert);
+		// Build update set clause
+		const sets: string[] = [
+			`alert_daysThreshold = @days`,
+			`alert_mileageThreshold = @km`,
+			`alert_lowEfficiencyThresholdKmPerGallon = @lowEff`,
+			`alert_highMaintenanceCostThreshold = @highMaint`,
+			`alert_maintenanceCostWindowDays = @win`
+		];
+		if (hasUpdatedAt) sets.push(`updatedAt = GETDATE()`);
+		if (hasUpdatedBy) sets.push(`updatedByUserId = ${userIdInt !== null ? String(userIdInt) : 'NULL'}`);
+
+		const sqlUpsert = `
+		IF EXISTS (SELECT 1 FROM settings)
+		BEGIN
+			UPDATE settings SET ${sets.join(', ')};
+		END
+		ELSE
+		BEGIN
+			INSERT INTO settings (${columns.join(', ')}) VALUES (${values.join(', ')});
+		END`;
+		await req.query(sqlUpsert);
 		return { success: true };
 	} catch (e) {
 		console.error('[Settings] saveAlertThresholdsAction error', e);

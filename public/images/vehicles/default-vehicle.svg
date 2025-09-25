@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="480" viewBox="0 0 800 480" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Vehículo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="800" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3F4F6"/>
+      <stop offset="1" stop-color="#E5E7EB"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="800" height="480" rx="16" fill="url(#bg)"/>
+  <g transform="translate(120,160)">
+    <rect x="0" y="36" width="560" height="120" rx="18" fill="#D1D5DB"/>
+    <rect x="60" y="0" width="280" height="80" rx="10" fill="#E5E7EB"/>
+    <rect x="360" y="0" width="80" height="80" rx="10" fill="#E5E7EB"/>
+    <circle cx="140" cy="180" r="36" fill="#9CA3AF"/>
+    <circle cx="140" cy="180" r="20" fill="#F9FAFB"/>
+    <circle cx="460" cy="180" r="36" fill="#9CA3AF"/>
+    <circle cx="460" cy="180" r="20" fill="#F9FAFB"/>
+    <rect x="40" y="96" width="480" height="16" rx="8" fill="#C7D2FE"/>
+  </g>
+  <text x="50%" y="442" text-anchor="middle" font-family="Segoe UI, Roboto, Helvetica, Arial, sans-serif" font-size="20" fill="#6B7280">Vehículo</text>
+</svg>

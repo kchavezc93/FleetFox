@@ -170,10 +170,10 @@ export async function getOverallVehicleCostsSummary(params: ReportParams = {}): 
         ISNULL(m.maintenanceLogCount, 0) AS maintenanceLogCount,
         ISNULL(f.totalFuelingCost, 0) AS totalFuelingCost,
         ISNULL(f.fuelingLogCount, 0) AS fuelingLogCount
-      FROM vehicles v
-      LEFT JOIN maint m ON m.vehicleId = v.id
-      LEFT JOIN fuel f ON f.vehicleId = v.id
-      ORDER BY v.createdAt DESC
+  FROM vehicles v
+  LEFT JOIN maint m ON m.vehicleId = v.id
+  LEFT JOIN fuel f ON f.vehicleId = v.id
+  ORDER BY v.createdAt DESC
     `;
 
     const result = await request.query(query);
@@ -231,8 +231,8 @@ export async function getFuelConsumptionSummary(params: ReportParams = {}): Prom
       FROM vehicles v
       INNER JOIN fueling_logs f ON f.vehicleId = v.id
       ${whereClause}
-      GROUP BY v.id, v.plateNumber, v.brand, v.model
-      ORDER BY v.createdAt DESC
+  GROUP BY v.id, v.plateNumber, v.brand, v.model
+  ORDER BY MAX(v.createdAt) DESC
     `;
 
     const result = await request.query(query);
@@ -293,8 +293,8 @@ export async function getFuelEfficiencyStats(params: ReportParams = {}): Promise
       FROM vehicles v
       INNER JOIN fueling_logs f ON f.vehicleId = v.id
       ${whereClause}
-      GROUP BY v.id, v.plateNumber, v.brand, v.model
-      ORDER BY v.createdAt DESC
+  GROUP BY v.id, v.plateNumber, v.brand, v.model
+  ORDER BY MAX(v.createdAt) DESC
     `;
     const result = await request.query(query);
     return result.recordset.map((row: any) => ({
@@ -514,12 +514,12 @@ export async function getComparativeExpenseSummary(params: ReportParams = {}): P
         ISNULL(f.fuelingLogCount,0) AS fuelingLogCount,
         ISNULL(f.totalLiters,0) AS totalLiters,
         CASE WHEN mi.points >= 2 THEN (mi.maxMileage - mi.minMileage) ELSE NULL END AS kmDriven
-      FROM vehicles v
-      LEFT JOIN maint m ON m.vehicleId = v.id
-      LEFT JOIN fuel f ON f.vehicleId = v.id
-      LEFT JOIN mileage mi ON mi.vehicleId = v.id
-      ${vehicleId ? "WHERE v.id = @vehicleId" : ""}
-      ORDER BY v.createdAt DESC
+  FROM vehicles v
+  LEFT JOIN maint m ON m.vehicleId = v.id
+  LEFT JOIN fuel f ON f.vehicleId = v.id
+  LEFT JOIN mileage mi ON mi.vehicleId = v.id
+  ${vehicleId ? "WHERE v.id = @vehicleId" : ""}
+  ORDER BY v.createdAt DESC
     `;
 
     const result = await request.query(query);
@@ -587,5 +587,306 @@ export async function getComparativeExpenseSummary(params: ReportParams = {}): P
       avgFuelEfficiency: null,
       vehicleBreakdown: [],
     };
+  }
+}
+
+// -------- Period-over-Period (PoP) Summary --------
+export type PeriodOverPeriodRow = {
+  vehicleId: string;
+  plateNumber: string;
+  brandModel: string;
+  // Current period
+  currentFuelCost: number;
+  currentMaintenanceCost: number;
+  currentOverallCost: number;
+  currentLiters: number;
+  currentGallons: number;
+  currentFuelLogs: number;
+  currentMaintLogs: number;
+  // Previous comparable period
+  prevFuelCost: number;
+  prevMaintenanceCost: number;
+  prevOverallCost: number;
+  prevLiters: number;
+  prevGallons: number;
+  prevFuelLogs: number;
+  prevMaintLogs: number;
+  // Deltas
+  deltaFuelCost: number;
+  deltaMaintenanceCost: number;
+  deltaOverallCost: number;
+  deltaGallons: number;
+  deltaFuelLogs: number;
+  deltaMaintLogs: number;
+  // Percentages (null when baseline is 0)
+  pctFuelCost: number | null;
+  pctMaintenanceCost: number | null;
+  pctOverallCost: number | null;
+  pctGallons: number | null;
+};
+
+export type PeriodOverPeriodSummary = {
+  rows: PeriodOverPeriodRow[];
+  totals: {
+    currentFuelCost: number;
+    currentMaintenanceCost: number;
+    currentOverallCost: number;
+    currentGallons: number;
+    prevFuelCost: number;
+    prevMaintenanceCost: number;
+    prevOverallCost: number;
+    prevGallons: number;
+    deltaFuelCost: number;
+    deltaMaintenanceCost: number;
+    deltaOverallCost: number;
+    deltaGallons: number;
+    pctFuelCost: number | null;
+    pctMaintenanceCost: number | null;
+    pctOverallCost: number | null;
+    pctGallons: number | null;
+  };
+  meta: {
+    startDate: string | null;
+    endDate: string | null;
+    prevStartDate: string | null;
+    prevEndDate: string | null;
+  };
+};
+
+// Helper to compute a previous period given start/end.
+function getPreviousPeriod(start?: string, end?: string): { prevStart?: string; prevEnd?: string } {
+  if (!start || !end) return {};
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const DAY_MS = 24 * 3600 * 1000;
+  const startD = new Date(start + "T00:00:00Z");
+  const endD = new Date(end + "T00:00:00Z");
+
+  // If the selected range is an exact calendar month (1st to last day of that month),
+  // compare against the full previous month (1st to last day), not just an equal-length window.
+  const sameMonth = startD.getUTCFullYear() === endD.getUTCFullYear() && startD.getUTCMonth() === endD.getUTCMonth();
+  const isStartFirstOfMonth = startD.getUTCDate() === 1;
+  const lastDayOfThisMonth = new Date(Date.UTC(endD.getUTCFullYear(), endD.getUTCMonth() + 1, 0));
+  const isEndLastOfMonth = endD.getUTCDate() === lastDayOfThisMonth.getUTCDate();
+  if (sameMonth && isStartFirstOfMonth && isEndLastOfMonth) {
+    const prevMonthEnd = new Date(Date.UTC(startD.getUTCFullYear(), startD.getUTCMonth(), 0)); // last day of previous month
+    const prevMonthStart = new Date(Date.UTC(startD.getUTCFullYear(), startD.getUTCMonth() - 1, 1));
+    return { prevStart: iso(prevMonthStart), prevEnd: iso(prevMonthEnd) };
+  }
+
+  // If the selected range is the full calendar year, compare against the full previous year.
+  const isFullYear = startD.getUTCMonth() === 0 && startD.getUTCDate() === 1 && endD.getUTCMonth() === 11 && endD.getUTCDate() === 31 && startD.getUTCFullYear() === endD.getUTCFullYear();
+  if (isFullYear) {
+    const prevYear = startD.getUTCFullYear() - 1;
+    const prevStart = new Date(Date.UTC(prevYear, 0, 1));
+    const prevEnd = new Date(Date.UTC(prevYear, 11, 31));
+    return { prevStart: iso(prevStart), prevEnd: iso(prevEnd) };
+  }
+
+  // Default: equal-length inclusive window immediately before the current period
+  const diffDays = Math.round((endD.getTime() - startD.getTime()) / DAY_MS);
+  const prevEnd = new Date(startD.getTime() - DAY_MS);
+  const prevStart = new Date(prevEnd.getTime() - diffDays * DAY_MS);
+  return { prevStart: iso(prevStart), prevEnd: iso(prevEnd) };
+}
+
+export async function getPeriodOverPeriodSummary(params: ReportParams = {}): Promise<PeriodOverPeriodSummary> {
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== "SQLServer") {
+    return { rows: [], totals: {
+      currentFuelCost: 0, currentMaintenanceCost: 0, currentOverallCost: 0, currentGallons: 0,
+      prevFuelCost: 0, prevMaintenanceCost: 0, prevOverallCost: 0, prevGallons: 0,
+      deltaFuelCost: 0, deltaMaintenanceCost: 0, deltaOverallCost: 0, deltaGallons: 0,
+      pctFuelCost: null, pctMaintenanceCost: null, pctOverallCost: null, pctGallons: null,
+    }, meta: { startDate: null, endDate: null, prevStartDate: null, prevEndDate: null } };
+  }
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  if (!pool) {
+    return { rows: [], totals: {
+      currentFuelCost: 0, currentMaintenanceCost: 0, currentOverallCost: 0, currentGallons: 0,
+      prevFuelCost: 0, prevMaintenanceCost: 0, prevOverallCost: 0, prevGallons: 0,
+      deltaFuelCost: 0, deltaMaintenanceCost: 0, deltaOverallCost: 0, deltaGallons: 0,
+      pctFuelCost: null, pctMaintenanceCost: null, pctOverallCost: null, pctGallons: null,
+    }, meta: { startDate: null, endDate: null, prevStartDate: null, prevEndDate: null } };
+  }
+
+  const { startDate, endDate, vehicleId } = params;
+  const { prevStart, prevEnd } = getPreviousPeriod(startDate, endDate);
+
+  try {
+    const request = pool.request();
+    if (startDate) request.input("startDate", sql.Date, startDate);
+    if (endDate) request.input("endDate", sql.Date, endDate);
+    if (prevStart) request.input("prevStart", sql.Date, prevStart);
+    if (prevEnd) request.input("prevEnd", sql.Date, prevEnd);
+    if (vehicleId) request.input("vehicleId", sql.NVarChar(50), vehicleId);
+
+  // We'll apply the vehicle filter after the JOINs to keep valid SQL syntax
+
+    const currMaintWhere: string[] = [];
+    const currFuelWhere: string[] = [];
+    const prevMaintWhere: string[] = [];
+    const prevFuelWhere: string[] = [];
+    if (startDate) { currMaintWhere.push("executionDate >= @startDate"); currFuelWhere.push("fuelingDate >= @startDate"); }
+    if (endDate) { currMaintWhere.push("executionDate <= @endDate"); currFuelWhere.push("fuelingDate <= @endDate"); }
+    if (prevStart) { prevMaintWhere.push("executionDate >= @prevStart"); prevFuelWhere.push("fuelingDate >= @prevStart"); }
+    if (prevEnd) { prevMaintWhere.push("executionDate <= @prevEnd"); prevFuelWhere.push("fuelingDate <= @prevEnd"); }
+    if (vehicleId) { currMaintWhere.push("vehicleId = @vehicleId"); currFuelWhere.push("vehicleId = @vehicleId"); prevMaintWhere.push("vehicleId = @vehicleId"); prevFuelWhere.push("vehicleId = @vehicleId"); }
+
+    const currMaintWC = currMaintWhere.length ? `WHERE ${currMaintWhere.join(" AND ")}` : "";
+    const currFuelWC = currFuelWhere.length ? `WHERE ${currFuelWhere.join(" AND ")}` : "";
+    const prevMaintWC = prevMaintWhere.length ? `WHERE ${prevMaintWhere.join(" AND ")}` : "";
+    const prevFuelWC = prevFuelWhere.length ? `WHERE ${prevFuelWhere.join(" AND ")}` : "";
+
+    const query = `
+      WITH curr_m AS (
+        SELECT vehicleId, SUM(cost) AS maintenanceCost, COUNT(1) AS maintLogs
+        FROM maintenance_logs
+        ${currMaintWC}
+        GROUP BY vehicleId
+      ), curr_f AS (
+        SELECT vehicleId, SUM(totalCost) AS fuelCost, SUM(quantityLiters) AS liters, COUNT(1) AS fuelLogs
+        FROM fueling_logs
+        ${currFuelWC}
+        GROUP BY vehicleId
+      ), prev_m AS (
+        SELECT vehicleId, SUM(cost) AS maintenanceCost, COUNT(1) AS maintLogs
+        FROM maintenance_logs
+        ${prevMaintWC}
+        GROUP BY vehicleId
+      ), prev_f AS (
+        SELECT vehicleId, SUM(totalCost) AS fuelCost, SUM(quantityLiters) AS liters, COUNT(1) AS fuelLogs
+        FROM fueling_logs
+        ${prevFuelWC}
+        GROUP BY vehicleId
+      )
+      SELECT 
+        v.id AS vehicleId,
+        v.plateNumber,
+        v.brand,
+        v.model,
+        ISNULL(cm.fuelCost,0) AS currentFuelCost,
+        ISNULL(cm.liters,0) AS currentLiters,
+        ISNULL(cm.fuelLogs,0) AS currentFuelLogs,
+        ISNULL(pm.fuelCost,0) AS prevFuelCost,
+        ISNULL(pm.liters,0) AS prevLiters,
+        ISNULL(pm.fuelLogs,0) AS prevFuelLogs,
+        ISNULL(cmm.maintenanceCost,0) AS currentMaintenanceCost,
+        ISNULL(cmm.maintLogs,0) AS currentMaintLogs,
+        ISNULL(pmm.maintenanceCost,0) AS prevMaintenanceCost,
+        ISNULL(pmm.maintLogs,0) AS prevMaintLogs
+      FROM vehicles v
+      LEFT JOIN curr_f cm ON cm.vehicleId = v.id
+      LEFT JOIN prev_f pm ON pm.vehicleId = v.id
+      LEFT JOIN curr_m cmm ON cmm.vehicleId = v.id
+      LEFT JOIN prev_m pmm ON pmm.vehicleId = v.id
+      ${vehicleId ? "WHERE v.id = @vehicleId" : ""}
+      ORDER BY v.createdAt DESC
+    `;
+
+    const result = await request.query(query);
+    const rows = (result.recordset || []).map((r: any) => {
+      const LITERS_PER_GALLON = 3.78541;
+      const currentGallons = parseFloat(r.currentLiters ?? 0) / LITERS_PER_GALLON;
+      const prevGallons = parseFloat(r.prevLiters ?? 0) / LITERS_PER_GALLON;
+      const currentFuelCost = parseFloat(r.currentFuelCost ?? 0);
+      const prevFuelCost = parseFloat(r.prevFuelCost ?? 0);
+      const currentMaintenanceCost = parseFloat(r.currentMaintenanceCost ?? 0);
+      const prevMaintenanceCost = parseFloat(r.prevMaintenanceCost ?? 0);
+      const currentOverallCost = currentFuelCost + currentMaintenanceCost;
+      const prevOverallCost = prevFuelCost + prevMaintenanceCost;
+
+      const deltaFuelCost = currentFuelCost - prevFuelCost;
+      const deltaMaintenanceCost = currentMaintenanceCost - prevMaintenanceCost;
+      const deltaOverallCost = currentOverallCost - prevOverallCost;
+      const deltaGallons = currentGallons - prevGallons;
+      const deltaFuelLogs = (Number(r.currentFuelLogs||0)) - (Number(r.prevFuelLogs||0));
+      const deltaMaintLogs = (Number(r.currentMaintLogs||0)) - (Number(r.prevMaintLogs||0));
+
+      const pct = (curr: number, prev: number): number | null => {
+        if (!prev || prev === 0) return null;
+        return (curr - prev) / prev;
+      };
+
+      return {
+        vehicleId: r.vehicleId?.toString?.() ?? String(r.vehicleId),
+        plateNumber: r.plateNumber,
+        brandModel: `${r.brand} ${r.model}`.trim(),
+        currentFuelCost,
+        currentMaintenanceCost,
+        currentOverallCost,
+        currentLiters: parseFloat(r.currentLiters ?? 0),
+        currentGallons,
+        currentFuelLogs: Number(r.currentFuelLogs || 0),
+        currentMaintLogs: Number(r.currentMaintLogs || 0),
+        prevFuelCost,
+        prevMaintenanceCost,
+        prevOverallCost,
+        prevLiters: parseFloat(r.prevLiters ?? 0),
+        prevGallons,
+        prevFuelLogs: Number(r.prevFuelLogs || 0),
+        prevMaintLogs: Number(r.prevMaintLogs || 0),
+        deltaFuelCost,
+        deltaMaintenanceCost,
+        deltaOverallCost,
+        deltaGallons,
+        deltaFuelLogs,
+        deltaMaintLogs,
+        pctFuelCost: pct(currentFuelCost, prevFuelCost),
+        pctMaintenanceCost: pct(currentMaintenanceCost, prevMaintenanceCost),
+        pctOverallCost: pct(currentOverallCost, prevOverallCost),
+        pctGallons: pct(currentGallons, prevGallons),
+      } as PeriodOverPeriodRow;
+    });
+
+    // Aggregate totals
+    const totals = rows.reduce((acc, r) => {
+      acc.currentFuelCost += r.currentFuelCost;
+      acc.currentMaintenanceCost += r.currentMaintenanceCost;
+      acc.currentOverallCost += r.currentOverallCost;
+      acc.currentGallons += r.currentGallons;
+      acc.prevFuelCost += r.prevFuelCost;
+      acc.prevMaintenanceCost += r.prevMaintenanceCost;
+      acc.prevOverallCost += r.prevOverallCost;
+      acc.prevGallons += r.prevGallons;
+      acc.deltaFuelCost += r.deltaFuelCost;
+      acc.deltaMaintenanceCost += r.deltaMaintenanceCost;
+      acc.deltaOverallCost += r.deltaOverallCost;
+      acc.deltaGallons += r.deltaGallons;
+      return acc;
+    }, {
+      currentFuelCost: 0, currentMaintenanceCost: 0, currentOverallCost: 0, currentGallons: 0,
+      prevFuelCost: 0, prevMaintenanceCost: 0, prevOverallCost: 0, prevGallons: 0,
+      deltaFuelCost: 0, deltaMaintenanceCost: 0, deltaOverallCost: 0, deltaGallons: 0
+    } as any);
+
+    const pct = (curr: number, prev: number): number | null => (prev ? (curr - prev) / prev : null);
+    const summary: PeriodOverPeriodSummary = {
+      rows: (vehicleId
+        ? rows // when a specific vehicle is requested, keep the row even with zeros
+        : rows.filter(r => r.currentFuelLogs + r.currentMaintLogs + r.prevFuelLogs + r.prevMaintLogs > 0)
+      ),
+      totals: {
+        ...totals,
+        pctFuelCost: pct(totals.currentFuelCost, totals.prevFuelCost),
+        pctMaintenanceCost: pct(totals.currentMaintenanceCost, totals.prevMaintenanceCost),
+        pctOverallCost: pct(totals.currentOverallCost, totals.prevOverallCost),
+        pctGallons: pct(totals.currentGallons, totals.prevGallons),
+      },
+      meta: {
+        startDate: startDate ?? null,
+        endDate: endDate ?? null,
+        prevStartDate: prevStart ?? null,
+        prevEndDate: prevEnd ?? null,
+      },
+    };
+    return summary;
+  } catch (err) {
+    console.error("[Report] getPeriodOverPeriodSummary error:", err);
+    return { rows: [], totals: {
+      currentFuelCost: 0, currentMaintenanceCost: 0, currentOverallCost: 0, currentGallons: 0,
+      prevFuelCost: 0, prevMaintenanceCost: 0, prevOverallCost: 0, prevGallons: 0,
+      deltaFuelCost: 0, deltaMaintenanceCost: 0, deltaOverallCost: 0, deltaGallons: 0,
+      pctFuelCost: null, pctMaintenanceCost: null, pctOverallCost: null, pctGallons: null,
+    }, meta: { startDate: startDate ?? null, endDate: endDate ?? null, prevStartDate: null, prevEndDate: null } };
   }
 }

@@ -1,5 +1,7 @@
 
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { VehicleForm } from "@/components/vehicle-form";
 import { CarFront } from "lucide-react";
 import { getVehicleById, updateVehicle } from "@/lib/actions/vehicle-actions"; // Removed deleteVehicle import
@@ -23,6 +25,11 @@ export default async function EditVehiclePage({ params }: { params: { id: string
         title="Editar Vehículo"
         description={`Actualiza los detalles del vehículo con matrícula ${vehicle.plateNumber}.`}
         icon={CarFront}
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/vehicles">Regresar</Link>
+          </Button>
+        }
       />
       <Card className="shadow-lg">
         <CardContent className="p-6">

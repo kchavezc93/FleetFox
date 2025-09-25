@@ -92,19 +92,20 @@ export async function createFuelingLog(formData: FuelingFormData) {
       logRequest.input('fl_costPerLiter', sql.Decimal(10, 2), data.costPerLiter);
       logRequest.input('fl_totalCost', sql.Decimal(10, 2), data.totalCost);
       logRequest.input('fl_station', sql.NVarChar(100), data.station);
+      logRequest.input('fl_responsible', sql.NVarChar(100), (data as any).responsible);
       logRequest.input('fl_imageUrl', sql.NVarChar(255), data.imageUrl || null); // Guardar null si no se provee
       logRequest.input('fl_fuelEfficiency', fuelEfficiencyKmPerGallon !== null ? sql.Decimal(10,1) : sql.Decimal(10,1), fuelEfficiencyKmPerGallon);
       
       const result = await logRequest.query(`
           INSERT INTO fueling_logs (
             vehicleId, vehiclePlateNumber, fuelingDate, mileageAtFueling, quantityLiters, 
-            costPerLiter, totalCost, station, imageUrl, fuelEfficiencyKmPerGallon, 
+            costPerLiter, totalCost, station, responsible, imageUrl, fuelEfficiencyKmPerGallon, 
             createdByUserId, updatedByUserId, createdAt, updatedAt
           )
           OUTPUT INSERTED.id, INSERTED.createdAt, INSERTED.updatedAt, INSERTED.imageUrl, INSERTED.createdByUserId, INSERTED.updatedByUserId
           VALUES (
             @fl_vehicleId, @fl_vehiclePlateNumber, @fl_fuelingDate, @fl_mileageAtFueling, @fl_quantityLiters,
-            @fl_costPerLiter, @fl_totalCost, @fl_station, @fl_imageUrl, @fl_fuelEfficiency,
+            @fl_costPerLiter, @fl_totalCost, @fl_station, @fl_responsible, @fl_imageUrl, @fl_fuelEfficiency,
             ${userIdInt !== null ? userIdInt : 'NULL'}, ${userIdInt !== null ? userIdInt : 'NULL'}, GETDATE(), GETDATE()
           );
       `);
@@ -133,6 +134,26 @@ export async function createFuelingLog(formData: FuelingFormData) {
           updateVehicleRequest.input('upd_v_id_mileage', sql.NVarChar(50), data.vehicleId);
           updateVehicleRequest.input('upd_v_mileage_val', sql.Int, data.mileageAtFueling);
           await updateVehicleRequest.query(`UPDATE vehicles SET currentMileage = @upd_v_mileage_val, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @upd_v_id_mileage`);
+      }
+
+      // Guardar voucher si viene en el payload
+      if ((formData as any).newVoucher?.content) {
+          const nv = (formData as any).newVoucher as { name: string; type: string; content: string };
+          const base64 = nv.content.split(',')[1] || '';
+          const buffer = Buffer.from(base64, 'base64');
+          const voucherReq = transaction.request();
+          voucherReq.input('v_log_id', sql.Int, parseInt(newLog.id, 10));
+          voucherReq.input('v_name', sql.NVarChar(200), nv.name);
+          voucherReq.input('v_type', sql.NVarChar(100), nv.type);
+          voucherReq.input('v_content', sql.VarBinary(sql.MAX), buffer);
+          await voucherReq.query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+            BEGIN
+              RAISERROR('Tabla fueling_vouchers no existe. Aplique la migración SQL.', 16, 1);
+            END
+            INSERT INTO fueling_vouchers (fueling_log_id, file_name, file_type, file_content, created_at)
+            VALUES (@v_log_id, @v_name, @v_type, @v_content, GETDATE());
+          `);
       }
       
       await transaction.commit();
@@ -192,7 +213,7 @@ export async function getFuelingLogs(): Promise<FuelingLog[]> {
       const result = await request.query(`
         SELECT 
           fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
-          fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+          fl.costPerLiter, fl.totalCost, fl.station, fl.responsible, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
           fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
         FROM fueling_logs fl
         LEFT JOIN users cu ON fl.createdByUserId = cu.id
@@ -209,6 +230,7 @@ export async function getFuelingLogs(): Promise<FuelingLog[]> {
         costPerLiter: parseFloat(row.costPerLiter),
         totalCost: parseFloat(row.totalCost),
         station: row.station,
+        responsible: row.responsible,
         imageUrl: row.imageUrl,
         fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
         createdAt: new Date(row.createdAt).toISOString(),
@@ -255,7 +277,7 @@ export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<Fuel
         const result = await request.query(`
           SELECT 
             fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
-            fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+            fl.costPerLiter, fl.totalCost, fl.station, fl.responsible, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
             fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
           FROM fueling_logs fl
           LEFT JOIN users cu ON fl.createdByUserId = cu.id
@@ -273,6 +295,7 @@ export async function getFuelingLogsByVehicleId(vehicleId: string): Promise<Fuel
           costPerLiter: parseFloat(row.costPerLiter),
           totalCost: parseFloat(row.totalCost),
           station: row.station,
+          responsible: row.responsible,
           imageUrl: row.imageUrl,
           fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
           createdAt: new Date(row.createdAt).toISOString(),
@@ -311,7 +334,7 @@ export async function getFuelingLogById(id: string): Promise<FuelingLog | null> 
     const result = await request.query(`
       SELECT TOP 1 
         fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
-        fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+        fl.costPerLiter, fl.totalCost, fl.station, fl.responsible, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
         fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
       FROM fueling_logs fl
       LEFT JOIN users cu ON fl.createdByUserId = cu.id
@@ -330,6 +353,7 @@ export async function getFuelingLogById(id: string): Promise<FuelingLog | null> 
       costPerLiter: parseFloat(row.costPerLiter),
       totalCost: parseFloat(row.totalCost),
       station: row.station,
+      responsible: row.responsible,
       imageUrl: row.imageUrl || undefined,
       fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
       createdAt: new Date(row.createdAt).toISOString(),
@@ -339,6 +363,41 @@ export async function getFuelingLogById(id: string): Promise<FuelingLog | null> 
       createdByUsername: row.createdByUsername || undefined,
       updatedByUsername: row.updatedByUsername || undefined,
     };
+
+    // Obtener vouchers asociados, si la tabla existe
+    try {
+      const vReq = pool.request();
+      vReq.input('id_find', sql.NVarChar(50), id);
+      const vRes = await vReq.query(`
+        IF EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+        BEGIN
+          SELECT id, fueling_log_id, file_name, file_type, file_content, created_at
+          FROM fueling_vouchers
+          WHERE fueling_log_id = @id_find
+          ORDER BY created_at DESC
+        END
+        ELSE
+        BEGIN
+          SELECT CAST(NULL AS INT) AS id, CAST(NULL AS INT) AS fueling_log_id, CAST(NULL AS NVARCHAR(1)) AS file_name, CAST(NULL AS NVARCHAR(1)) AS file_type, CAST(NULL AS VARBINARY(MAX)) AS file_content, CAST(NULL AS DATETIME2) AS created_at WHERE 1=0
+        END
+      `);
+      if (vRes.recordset && vRes.recordset.length) {
+        log.vouchers = vRes.recordset.map((vr: any) => {
+          const buf: Buffer = Buffer.isBuffer(vr.file_content) ? vr.file_content : Buffer.from(vr.file_content || '');
+          const dataUri = `data:${vr.file_type};base64,${buf.toString('base64')}`;
+          return {
+            id: vr.id.toString(),
+            fuelingLogId: vr.fueling_log_id.toString(),
+            fileName: vr.file_name,
+            fileType: vr.file_type,
+            fileContent: dataUri,
+            createdAt: vr.created_at ? new Date(vr.created_at).toISOString() : new Date().toISOString(),
+          };
+        });
+      }
+    } catch (e) {
+      // Tabla no existe u otro error, continuar sin vouchers
+    }
     return log;
   } catch (err) {
     console.error(`[SQL Server Error] getFuelingLogById`, err);
@@ -407,7 +466,8 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     updReq.input('cpl', sql.Decimal(10, 2), data.costPerLiter);
     updReq.input('total', sql.Decimal(10, 2), data.totalCost);
     updReq.input('station', sql.NVarChar(100), data.station);
-    updReq.input('imageUrl', sql.NVarChar(255), data.imageUrl || null);
+  updReq.input('imageUrl', sql.NVarChar(255), data.imageUrl || null);
+  updReq.input('responsible', sql.NVarChar(100), (data as any).responsible);
     updReq.input('eff', sql.Decimal(10, 1), fuelEfficiencyKmPerGallon);
 
     await updReq.query(`
@@ -421,6 +481,7 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
         costPerLiter = @cpl,
         totalCost = @total,
         station = @station,
+        responsible = @responsible,
         imageUrl = @imageUrl,
         fuelEfficiencyKmPerGallon = @eff,
         updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'},
@@ -436,6 +497,26 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
         UPDATE vehicles 
         SET currentMileage = @mileageVal, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE()
         WHERE id = @vId;
+      `);
+    }
+
+    // Guardar voucher si viene en el payload
+    if ((formData as any).newVoucher?.content) {
+      const nv = (formData as any).newVoucher as { name: string; type: string; content: string };
+      const base64 = nv.content.split(',')[1] || '';
+      const buffer = Buffer.from(base64, 'base64');
+      const voucherReq = transaction.request();
+      voucherReq.input('v_log_id', sql.Int, parseInt(id, 10));
+      voucherReq.input('v_name', sql.NVarChar(200), nv.name);
+      voucherReq.input('v_type', sql.NVarChar(100), nv.type);
+      voucherReq.input('v_content', sql.VarBinary(sql.MAX), buffer);
+      await voucherReq.query(`
+        IF NOT EXISTS (SELECT 1 FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[fueling_vouchers]') AND type in (N'U'))
+        BEGIN
+          RAISERROR('Tabla fueling_vouchers no existe. Aplique la migración SQL.', 16, 1);
+        END
+        INSERT INTO fueling_vouchers (fueling_log_id, file_name, file_type, file_content, created_at)
+        VALUES (@v_log_id, @v_name, @v_type, @v_content, GETDATE());
       `);
     }
 
@@ -483,8 +564,13 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
   try {
     const request = pool.request();
     if (vehicleId) request.input('vId', sql.NVarChar(50), vehicleId);
-    if (from) request.input('fromDate', sql.Date, new Date(from));
-    if (to) request.input('toDate', sql.Date, new Date(to));
+    // Build UTC date-only objects to avoid timezone shifts
+    const toUtcDate = (s: string) => {
+      const [yy, mm, dd] = s.split('-').map((n) => parseInt(n, 10));
+      return new Date(Date.UTC(yy, (mm || 1) - 1, dd || 1));
+    };
+    if (from) request.input('fromDate', sql.Date, toUtcDate(from));
+    if (to) request.input('toDate', sql.Date, toUtcDate(to));
     const where: string[] = [];
     if (vehicleId) where.push('vehicleId = @vId');
     if (from) where.push('fuelingDate >= @fromDate');
@@ -493,7 +579,7 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
     const result = await request.query(`
       SELECT 
         fl.id, fl.vehicleId, fl.vehiclePlateNumber, fl.fuelingDate, fl.mileageAtFueling, fl.quantityLiters,
-        fl.costPerLiter, fl.totalCost, fl.station, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
+        fl.costPerLiter, fl.totalCost, fl.station, fl.responsible, fl.imageUrl, fl.fuelEfficiencyKmPerGallon, fl.createdAt, fl.updatedAt,
         fl.createdByUserId, fl.updatedByUserId, cu.username AS createdByUsername, uu.username AS updatedByUsername
       FROM fueling_logs fl
       LEFT JOIN users cu ON fl.createdByUserId = cu.id
@@ -511,6 +597,7 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
       costPerLiter: parseFloat(row.costPerLiter),
       totalCost: parseFloat(row.totalCost),
       station: row.station,
+      responsible: row.responsible,
       imageUrl: row.imageUrl || undefined,
       fuelEfficiencyKmPerGallon: row.fuelEfficiencyKmPerGallon ? parseFloat(row.fuelEfficiencyKmPerGallon) : undefined,
       createdAt: new Date(row.createdAt).toISOString(),

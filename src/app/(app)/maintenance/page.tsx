@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
 import { requirePermission } from "@/lib/authz";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import {
   DropdownMenu,
@@ -97,7 +98,7 @@ export default async function MaintenancePage() {
                       {log.maintenanceType}
                     </Badge>
                   </TableCell>
-                  <TableCell>{format(new Date(log.executionDate), "PP", { locale: es })}</TableCell>
+                  <TableCell>{formatDateDDMMYYYY(log.executionDate)}</TableCell>
                   <TableCell>{log.mileageAtService.toLocaleString()} km</TableCell>
                   <TableCell>C${log.cost.toFixed(2)}</TableCell>
                   <TableCell className="text-right">

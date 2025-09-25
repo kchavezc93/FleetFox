@@ -59,6 +59,7 @@ const navItemConfigs: NavItemConfig[] = [
       { key: "maintenanceHistoryReport", href: "/reports/maintenance-history", defaultLabel: "Historial de Mantenimiento", icon: History },
       { key: "upcomingMaintenanceReport", href: "/reports/upcoming-maintenance", defaultLabel: "Mantenimiento Próximo", icon: CalendarClock },
       { key: "fuelEfficiencyAnalysisReport", href: "/reports/fuel-efficiency-analysis", defaultLabel: "Análisis de Eficiencia", icon: TrendingUp },
+      { key: "periodOverPeriodReport", href: "/reports/period-over-period", defaultLabel: "Período vs Período", icon: TrendingUp },
       { key: "comparativeExpenseAnalysisReport", href: "/reports/comparative-expense-analysis", defaultLabel: "Análisis Comparativo Gastos", icon: BarChartHorizontalBig },
     ],
   },
@@ -110,26 +111,27 @@ export function SidebarNav({ userRole = 'Standard', userPermissions = [] }: Side
             onClick={() => toggleSubMenu(itemConfig.key)}
             isActive={isParentActive && !isSubMenuOpen} 
             aria-expanded={isSubMenuOpen}
-            className="justify-between"
+            className="justify-between items-start"
             tooltip={label}
             disabled={itemConfig.disabled}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-start gap-2">
               <itemConfig.icon className="h-5 w-5" />
-              <span>{label}</span>
+              <span className="whitespace-normal break-words leading-snug">{label}</span>
             </div>
           </SidebarMenuButton>
           {isSubMenuOpen && (
             <SidebarMenuSub>
               {itemConfig.subItems?.map((subItemConfig) => (
                 <SidebarMenuSubItem key={subItemConfig.key}>
-                   <Link href={subItemConfig.href} passHref legacyBehavior>
+                  <Link href={subItemConfig.href}>
                     <SidebarMenuSubButton
+                      asChild
                       isActive={pathname === subItemConfig.href || pathname.startsWith(subItemConfig.href)}
                       aria-disabled={subItemConfig.disabled}
                       className={subItemConfig.disabled ? 'pointer-events-none opacity-50' : undefined}
                     >
-                      {subItemConfig.defaultLabel} 
+                      <span className="whitespace-normal break-words leading-snug">{subItemConfig.defaultLabel}</span>
                     </SidebarMenuSubButton>
                   </Link>
                 </SidebarMenuSubItem>
@@ -144,14 +146,17 @@ export function SidebarNav({ userRole = 'Standard', userPermissions = [] }: Side
 
     return (
       <SidebarMenuItem key={itemConfig.key}>
-        <Link href={itemConfig.href} passHref legacyBehavior>
+        <Link href={itemConfig.href}>
           <ButtonComponent
+            asChild
             isActive={isActive}
             tooltip={label}
             disabled={itemConfig.disabled}
           >
-            <itemConfig.icon className="h-5 w-5" />
-            <span>{label}</span>
+            <span className="flex items-start gap-2">
+              <itemConfig.icon className="h-5 w-5" />
+              <span className="whitespace-normal break-words leading-snug">{label}</span>
+            </span>
           </ButtonComponent>
         </Link>
       </SidebarMenuItem>

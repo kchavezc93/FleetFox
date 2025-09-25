@@ -47,7 +47,9 @@ export const fuelingLogSchema = z.object({
   costPerLiter: z.coerce.number().min(0.01, "El costo por litro debe ser positivo"),
   totalCost: z.coerce.number().min(0.01, "El costo total debe ser positivo"),
   station: z.string().min(1, "La estación de servicio es obligatoria").max(100, "Nombre de la estación demasiado largo"),
+  responsible: z.string().min(1, "El responsable es obligatorio").max(100, "Nombre del responsable demasiado largo"),
   imageUrl: z.string().url("Debe ser una URL válida para la imagen.").optional().or(z.literal('')),
+  newVoucher: z.object({ name: z.string(), type: z.string(), content: z.string() }).optional()
 });
 
 export type FuelingLogSchema = z.infer<typeof fuelingLogSchema>;
@@ -76,7 +78,11 @@ export const userSchema = z.object({
   email: z.string().email("Correo electrónico inválido."),
   username: z.string().min(3, "El nombre de usuario debe tener al menos 3 caracteres."),
   fullName: z.string().optional(),
-  password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional(),
+  // En edición, permitir campo vacío como "no cambiar": '' -> undefined
+  password: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+    z.string().min(6, "La contraseña debe tener al menos 6 caracteres.").optional()
+  ),
   role: z.enum(["Admin", "Standard"]),
   permissions: z.array(z.string()).default([]),
   active: z.coerce.boolean().default(true),

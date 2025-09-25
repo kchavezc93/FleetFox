@@ -60,8 +60,8 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
 
       // Obtener plateNumber del vehículo para denormalización (opcional, pero simplifica listados)
       let vehiclePlateNumber = "N/A";
-      const vehicleRequest = transaction.request(); 
-      vehicleRequest.input('vehicleIdForMeta', sql.NVarChar(50), data.vehicleId);
+  const vehicleRequest = transaction.request(); 
+  vehicleRequest.input('vehicleIdForMeta', sql.Int, parseInt(data.vehicleId as unknown as string, 10));
       const vehicleResult = await vehicleRequest.query('SELECT plateNumber, currentMileage, nextPreventiveMaintenanceMileage, nextPreventiveMaintenanceDate FROM vehicles WHERE id = @vehicleIdForMeta');
       
       if (vehicleResult.recordset.length > 0) {
@@ -73,8 +73,8 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       }
       
       // Insertar el registro de mantenimiento principal
-      const logRequest = transaction.request(); 
-      logRequest.input('ml_vehicleId', sql.NVarChar(50), data.vehicleId);
+  const logRequest = transaction.request(); 
+  logRequest.input('ml_vehicleId', sql.Int, parseInt(data.vehicleId as unknown as string, 10));
       logRequest.input('ml_vehiclePlateNumber', sql.NVarChar(50), vehiclePlateNumber); 
       logRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
       logRequest.input('ml_executionDate', sql.Date, data.executionDate);
@@ -115,25 +115,23 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
           // El 'content' viene como Data URI (ej. "data:image/png;base64,iVBORw0KGgo...")
           // Necesitamos extraer la parte Base64 pura.
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
-          
+          const fileBuffer = Buffer.from(base64Data, 'base64');
           const attachmentRequest = transaction.request(); 
-          attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), newLogId); // Usar newLogId
+          attachmentRequest.input('ad_maintenance_log_id', sql.Int, parseInt(newLogId, 10)); // Usar newLogId
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
           attachmentRequest.input('ad_file_type', sql.NVarChar(100), attachment.type);
-          // El estilo 2 de CONVERT es para Base64 puro sin prefijo "0x"
-          attachmentRequest.input('ad_file_content_base64', sql.NVarChar(sql.MAX), base64Data); 
-          
+          attachmentRequest.input('ad_file_content', sql.VarBinary(sql.MAX), fileBuffer);
           await attachmentRequest.query(`
             INSERT INTO attached_documents (maintenance_log_id, file_name, file_type, file_content, created_at)
-            VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, CONVERT(VARBINARY(MAX), @ad_file_content_base64, 2), GETDATE());
+            VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, @ad_file_content, GETDATE());
           `);
         }
       }
 
       // Actualizar el vehículo con el nuevo kilometraje y las próximas fechas/kilometrajes de mantenimiento
       const vehicleDataFromDb = vehicleResult.recordset[0];
-      const updateVehicleRequest = transaction.request(); 
-      updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), data.vehicleId);
+  const updateVehicleRequest = transaction.request(); 
+  updateVehicleRequest.input('upd_v_id', sql.Int, parseInt(data.vehicleId as unknown as string, 10));
       // Solo actualizar currentMileage si el kilometraje del servicio es mayor
       const newCurrentMileage = Math.max(data.mileageAtService, vehicleDataFromDb.currentMileage);
       updateVehicleRequest.input('upd_v_currentMileage', sql.Int, newCurrentMileage); 
@@ -156,7 +154,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       const createdAttachments: AttachedDocument[] = [];
       if (data.newAttachments && data.newAttachments.length > 0) {
           const getAttachmentsReq = pool.request(); // Nueva request fuera de la transacción ya commiteada
-          getAttachmentsReq.input('ga_log_id', sql.NVarChar(50), newLogId);
+          getAttachmentsReq.input('ga_log_id', sql.Int, parseInt(newLogId, 10));
           const attachmentsResult = await getAttachmentsReq.query(`
             SELECT id, maintenance_log_id, file_name, file_type, file_content, created_at 
             FROM attached_documents WHERE maintenance_log_id = @ga_log_id
@@ -196,7 +194,7 @@ export async function createMaintenanceLog(formData: MaintenanceFormData) {
       revalidatePath(`/maintenance/${newLogId}`); // Para la página de detalles del log
       return { message: `Registro de mantenimiento creado exitosamente para ${vehiclePlateNumber}.`, log: createdLog, success: true };
     } catch (error) {
-              await transaction.rollback();
+      try { await transaction.rollback(); } catch (rbErr) { console.warn('[TX] rollback failed or already aborted', rbErr); }
 
       // PRODUCCIÓN: logger.error({ action: 'createMaintenanceLog', data, error: (error as Error).message, stack: (error as Error).stack }, "Error creating maintenance log");
       console.error(`[SQL Server Error] Error al crear registro de mantenimiento:`, error);
@@ -268,8 +266,8 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       await transaction.begin();
 
       // Obtener el vehicleId del log existente para actualizar el vehículo después
-      const getLogRequest = transaction.request(); 
-      getLogRequest.input('logIdForVehicleInfo', sql.NVarChar(50), id);
+  const getLogRequest = transaction.request(); 
+  getLogRequest.input('logIdForVehicleInfo', sql.Int, parseInt(id, 10));
       const logInfoResult = await getLogRequest.query('SELECT vehicleId, vehiclePlateNumber FROM maintenance_logs WHERE id = @logIdForVehicleInfo');
       if (logInfoResult.recordset.length === 0) {
           await transaction.rollback();
@@ -280,8 +278,8 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       const existingLogPlateNumber = logInfoResult.recordset[0].vehiclePlateNumber;
 
       // Actualizar el registro de mantenimiento principal
-      const logUpdateRequest = transaction.request(); 
-      logUpdateRequest.input('ml_id', sql.NVarChar(50), id);
+  const logUpdateRequest = transaction.request(); 
+  logUpdateRequest.input('ml_id', sql.Int, parseInt(id, 10));
       logUpdateRequest.input('ml_maintenanceType', sql.NVarChar(50), data.maintenanceType);
       logUpdateRequest.input('ml_executionDate', sql.Date, data.executionDate);
       logUpdateRequest.input('ml_mileageAtService', sql.Int, data.mileageAtService);
@@ -319,8 +317,8 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       if (data.attachmentsToRemove && data.attachmentsToRemove.length > 0) {
         for (const attachmentIdToRemove of data.attachmentsToRemove) {
           const deleteAttachmentRequest = transaction.request(); 
-          deleteAttachmentRequest.input('ad_id_to_remove', sql.NVarChar(50), attachmentIdToRemove);
-          deleteAttachmentRequest.input('ad_log_id_check', sql.NVarChar(50), id); // Asegurar que el adjunto pertenece al log
+          deleteAttachmentRequest.input('ad_id_to_remove', sql.Int, parseInt(attachmentIdToRemove, 10));
+          deleteAttachmentRequest.input('ad_log_id_check', sql.Int, parseInt(id, 10)); // Asegurar que el adjunto pertenece al log
           await deleteAttachmentRequest.query('DELETE FROM attached_documents WHERE id = @ad_id_to_remove AND maintenance_log_id = @ad_log_id_check;');
         }
       }
@@ -328,22 +326,22 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       if (data.newAttachments && data.newAttachments.length > 0) {
         for (const attachment of data.newAttachments) {
           const base64Data = attachment.content.substring(attachment.content.indexOf(',') + 1);
+          const fileBuffer = Buffer.from(base64Data, 'base64');
           const attachmentRequest = transaction.request(); 
-          attachmentRequest.input('ad_maintenance_log_id', sql.NVarChar(50), id); // Usar el ID del log que se está actualizando
+          attachmentRequest.input('ad_maintenance_log_id', sql.Int, parseInt(id, 10)); // Usar el ID del log que se está actualizando
           attachmentRequest.input('ad_file_name', sql.NVarChar(255), attachment.name);
           attachmentRequest.input('ad_file_type', sql.NVarChar(100), attachment.type);
-          attachmentRequest.input('ad_file_content_base64', sql.NVarChar(sql.MAX), base64Data);
-          
+          attachmentRequest.input('ad_file_content', sql.VarBinary(sql.MAX), fileBuffer);
           await attachmentRequest.query(`
             INSERT INTO attached_documents (maintenance_log_id, file_name, file_type, file_content, created_at)
-            VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, CONVERT(VARBINARY(MAX), @ad_file_content_base64, 2), GETDATE());
+            VALUES (@ad_maintenance_log_id, @ad_file_name, @ad_file_type, @ad_file_content, GETDATE());
           `);
         }
       }
 
       // Actualizar el vehículo (asegurándose de tener el vehicleId correcto)
-      const vehicleOriginalDataRequest = transaction.request(); 
-      vehicleOriginalDataRequest.input('v_id_for_update', sql.NVarChar(50), existingLogVehicleId);
+  const vehicleOriginalDataRequest = transaction.request(); 
+  vehicleOriginalDataRequest.input('v_id_for_update', sql.Int, existingLogVehicleId);
       const vehicleOriginalDataResult = await vehicleOriginalDataRequest.query('SELECT currentMileage FROM vehicles WHERE id = @v_id_for_update');
       if (vehicleOriginalDataResult.recordset.length === 0) {
           await transaction.rollback();
@@ -352,8 +350,8 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       }
       const originalVehicleMileage = vehicleOriginalDataResult.recordset[0].currentMileage;
 
-      const updateVehicleRequest = transaction.request(); 
-      updateVehicleRequest.input('upd_v_id', sql.NVarChar(50), existingLogVehicleId);
+  const updateVehicleRequest = transaction.request(); 
+  updateVehicleRequest.input('upd_v_id', sql.Int, existingLogVehicleId);
       const newCurrentMileageForVehicle = Math.max(data.mileageAtService, originalVehicleMileage);
       updateVehicleRequest.input('upd_v_currentMileage', sql.Int, newCurrentMileageForVehicle); 
       updateVehicleRequest.input('upd_v_nextMaintDate', sql.Date, data.nextMaintenanceDateScheduled);
@@ -369,12 +367,12 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
         WHERE id = @upd_v_id;
       `);
       
-      await transaction.commit();
+  await transaction.commit();
       
        // Obtener todos los adjuntos (existentes + nuevos) para la respuesta (opcional)
       const allAttachments: AttachedDocument[] = [];
-      const getAllAttachmentsReq = pool.request(); // Nueva request fuera de la transacción
-      getAllAttachmentsReq.input('ga_log_id_updated', sql.NVarChar(50), id);
+  const getAllAttachmentsReq = pool.request(); // Nueva request fuera de la transacción
+  getAllAttachmentsReq.input('ga_log_id_updated', sql.Int, parseInt(id, 10));
       const attachmentsResultUpdated = await getAllAttachmentsReq.query(`
         SELECT id, maintenance_log_id, file_name, file_type, file_content, created_at 
         FROM attached_documents WHERE maintenance_log_id = @ga_log_id_updated
@@ -415,7 +413,7 @@ export async function updateMaintenanceLog(id: string, formData: MaintenanceForm
       revalidatePath(`/vehicles/${updatedLog.vehicleId}`);
       return { message: `Registro de mantenimiento para ${updatedLog.vehiclePlateNumber} actualizado exitosamente.`, log: updatedLog, success: true };
     } catch (error) {
-              await transaction.rollback();
+      try { await transaction.rollback(); } catch (rbErr) { console.warn('[TX] rollback failed or already aborted', rbErr); }
 
       // PRODUCCIÓN: logger.error({ action: 'updateMaintenanceLog', logId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error updating maintenance log");
       console.error(`[SQL Server Error] Error al actualizar registro de mantenimiento ${id}:`, error);
@@ -585,6 +583,78 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
   
   // console.log(`[Get Maintenance Logs] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Devolviendo lista vacía.`);
   // return [];
+}
+
+export async function getMaintenanceLogsFiltered({ vehicleId, from, to }: { vehicleId?: string; from?: string; to?: string; }): Promise<MaintenanceLog[]> {
+  const dbClient = await getDbClient();
+  if (!dbClient) {
+    console.warn("getMaintenanceLogsFiltered: Configuración de BD no encontrada. Devolviendo lista vacía.");
+    return [];
+  }
+
+  if (dbClient.type === "SQLServer") {
+    const pool = (dbClient as any).pool as sql.ConnectionPool;
+    if (!pool) {
+      console.error("getMaintenanceLogsFiltered: Pool de SQL Server no disponible.");
+      return [];
+    }
+    try {
+      const request = pool.request();
+      let whereParts: string[] = [];
+      if (vehicleId) {
+        request.input('vehicleId', sql.NVarChar(50), vehicleId);
+        whereParts.push('ml.vehicleId = @vehicleId');
+      }
+      if (from) {
+        request.input('fromDate', sql.Date, new Date(from + 'T00:00:00'));
+        whereParts.push('ml.executionDate >= @fromDate');
+      }
+      if (to) {
+        request.input('toDate', sql.Date, new Date(to + 'T00:00:00'));
+        whereParts.push('ml.executionDate <= @toDate');
+      }
+      const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+      const query = `
+        SELECT 
+          ml.id, ml.vehicleId, ml.vehiclePlateNumber, ml.maintenanceType, ml.executionDate, ml.mileageAtService,
+          ml.activitiesPerformed, ml.cost, ml.provider, ml.nextMaintenanceDateScheduled,
+          ml.nextMaintenanceMileageScheduled, ml.createdAt, ml.updatedAt,
+          ml.createdByUserId, ml.updatedByUserId,
+          cu.username AS createdByUsername, uu.username AS updatedByUsername,
+          (SELECT COUNT(*) FROM attached_documents ad WHERE ad.maintenance_log_id = ml.id) AS attachmentCount 
+        FROM maintenance_logs ml
+        LEFT JOIN users cu ON ml.createdByUserId = cu.id
+        LEFT JOIN users uu ON ml.updatedByUserId = uu.id
+        ${whereClause}
+        ORDER BY ml.executionDate DESC, ml.createdAt DESC`;
+      const result = await request.query(query);
+      return result.recordset.map(row => ({
+        id: row.id.toString(),
+        vehicleId: row.vehicleId,
+        vehiclePlateNumber: row.vehiclePlateNumber,
+        maintenanceType: row.maintenanceType,
+        executionDate: new Date(row.executionDate).toISOString().split('T')[0],
+        mileageAtService: row.mileageAtService,
+        activitiesPerformed: row.activitiesPerformed,
+        cost: parseFloat(row.cost),
+        provider: row.provider,
+        nextMaintenanceDateScheduled: row.nextMaintenanceDateScheduled ? new Date(row.nextMaintenanceDateScheduled).toISOString().split('T')[0] : "",
+        nextMaintenanceMileageScheduled: row.nextMaintenanceMileageScheduled,
+        createdAt: new Date(row.createdAt).toISOString(),
+        attachments: [],
+        createdByUserId: row.createdByUserId ? row.createdByUserId.toString() : undefined,
+        updatedByUserId: row.updatedByUserId ? row.updatedByUserId.toString() : undefined,
+        createdByUsername: row.createdByUsername || undefined,
+        updatedByUsername: row.updatedByUsername || undefined,
+      })) as MaintenanceLog[];
+    } catch (error) {
+      console.error('[SQL Server Error] Error al obtener registros de mantenimiento filtrados:', error);
+      return [];
+    }
+  } else {
+    console.warn(`[Get Maintenance Logs Filtered] No implementado para tipo de BD: ${dbClient.type}.`);
+    return [];
+  }
 }
 
 export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog | null> {

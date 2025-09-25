@@ -63,14 +63,25 @@ export interface FuelingLog {
   totalCost: number;
   fuelEfficiencyKmPerGallon?: number;
   station: string;
+  responsible: string;
   createdAt: string; // ISO date string
   updatedAt?: string; // ISO date string
   imageUrl?: string;
+  vouchers?: FuelingVoucher[];
   // Auditoría
   createdByUserId?: string;
   updatedByUserId?: string;
   createdByUsername?: string;
   updatedByUsername?: string;
+}
+
+export interface FuelingVoucher {
+  id: string;
+  fuelingLogId: string;
+  fileName: string;
+  fileType: string;
+  fileContent: string; // Base64 Data URI
+  createdAt: string;
 }
 
 export interface UserProfile {
@@ -145,4 +156,5 @@ export type MaintenanceFormData = Omit<MaintenanceLog, "id" | "createdAt" | "veh
 export type FuelingFormData = Omit<FuelingLog, "id" | "createdAt" | "vehiclePlateNumber" | "fuelEfficiencyKmPerGallon" | "fuelingDate" | "imageUrl"> & {
   fuelingDate: Date;
   imageUrl?: string;
+  newVoucher?: NewAttachmentPayload; // Reuse attachment payload shape for voucher
 };

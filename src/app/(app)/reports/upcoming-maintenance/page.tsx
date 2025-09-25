@@ -18,11 +18,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
-import { getUpcomingMaintenance } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import type { Vehicle } from "@/types";
 import { format, differenceInDays, addDays } from "date-fns";
 import { es } from "date-fns/locale";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 const DEFAULT_DAYS_THRESHOLD = 30; // Mantenimiento en los próximos X días
@@ -42,14 +41,18 @@ export default function UpcomingMaintenanceReportPage() {
       setIsLoading(true);
       try {
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const data = await getUpcomingMaintenance({ 
-          daysThreshold, 
-          mileageThreshold: kmThreshold,
-          vehicleId: selectedVehicleId !== "all" ? selectedVehicleId : undefined,
-        });
+        const params = new URLSearchParams();
+        params.set("daysThreshold", String(daysThreshold));
+        params.set("mileageThreshold", String(kmThreshold));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+        const res = await fetch(`/api/reports/upcoming-maintenance?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const data: UpcomingMaintenanceItem[] = await res.json();
         setUpcomingVehicles(data);
       } catch (error) {
         console.error("Error loading upcoming maintenance report data:", error);
@@ -74,7 +77,7 @@ export default function UpcomingMaintenanceReportPage() {
       ...upcomingVehicles.map(v => [
         v.plateNumber,
         `${v.brand} ${v.model}`,
-        v.nextPreventiveMaintenanceDate ? format(new Date(v.nextPreventiveMaintenanceDate + "T00:00:00"), "PP", { locale: es }) : 'N/D',
+  v.nextPreventiveMaintenanceDate ? formatDateDDMMYYYY(v.nextPreventiveMaintenanceDate) : 'N/D',
         v.nextPreventiveMaintenanceMileage != null ? v.nextPreventiveMaintenanceMileage.toLocaleString() : 'N/D',
         v.reason,
         v.daysToNextMaintenance ?? 'N/A',
@@ -172,9 +175,9 @@ export default function UpcomingMaintenanceReportPage() {
       />
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Vehículos con Mantenimiento Próximo</CardTitle>
+          <CardTitle className="text-2xl">Vehículos con Mantenimiento Próximo</CardTitle>
           <CardDescription>
-            Lista de vehículos cuyo mantenimiento preventivo está programado o se acerca. Los datos se mostrarán una vez implementada la base de datos.
+            Lista de vehículos cuyo mantenimiento preventivo está programado o se acerca según los umbrales configurados.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -183,16 +186,16 @@ export default function UpcomingMaintenanceReportPage() {
           ) : upcomingVehicles.length === 0 ? (
             <p className="text-muted-foreground">No hay vehículos con mantenimiento próximo o no hay datos disponibles. Verifique la implementación de la base de datos.</p>
           ) : (
-            <Table>
+            <Table className="text-base">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Vehículo (Matrícula)</TableHead>
-                  <TableHead>Marca y Modelo</TableHead>
-                  <TableHead>Próx. Mantenimiento (Fecha)</TableHead>
-                  <TableHead>Próx. Mantenimiento (Km)</TableHead>
-                  <TableHead>Alerta Por</TableHead>
-                  <TableHead className="text-right">Días Restantes</TableHead>
-                  <TableHead className="text-right">Km Restantes</TableHead>
+                  <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
+                  <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                  <TableHead className="font-semibold">Próx. Mantenimiento (Fecha)</TableHead>
+                  <TableHead className="font-semibold">Próx. Mantenimiento (Km)</TableHead>
+                  <TableHead className="font-semibold">Alerta Por</TableHead>
+                  <TableHead className="text-right font-semibold">Días Restantes</TableHead>
+                  <TableHead className="text-right font-semibold">Km Restantes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -200,7 +203,7 @@ export default function UpcomingMaintenanceReportPage() {
                   <TableRow key={vehicle.vehicleId}>
                     <TableCell className="font-medium">{vehicle.plateNumber}</TableCell>
                     <TableCell>{vehicle.brand} {vehicle.model}</TableCell>
-                    <TableCell>{vehicle.nextPreventiveMaintenanceDate ? format(new Date(vehicle.nextPreventiveMaintenanceDate + "T00:00:00"), "PP", { locale: es }) : "N/D"}</TableCell>
+                    <TableCell>{vehicle.nextPreventiveMaintenanceDate ? formatDateDDMMYYYY(vehicle.nextPreventiveMaintenanceDate) : "N/D"}</TableCell>
                     <TableCell>{vehicle.nextPreventiveMaintenanceMileage != null ? vehicle.nextPreventiveMaintenanceMileage.toLocaleString() : 'N/D'} km</TableCell>
                     <TableCell>
                         <Badge 

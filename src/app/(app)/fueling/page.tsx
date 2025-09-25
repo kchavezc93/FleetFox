@@ -13,8 +13,10 @@ import {
 } from "@/components/ui/table";
 import { getFuelingLogs, getFuelingLogsFiltered, deleteFuelingLog } from "@/lib/actions/fueling-actions";
 import { format } from "date-fns";
+import { formatDateDDMMYYYY } from "@/lib/utils";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { FuelingExportButtons } from "@/components/fueling-export";
+import FuelingFilters from "@/components/fueling-filters";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { exportToXLSX } from "@/lib/export-excel";
 import { cookies } from "next/headers";
@@ -25,6 +27,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { requirePermission } from "@/lib/authz";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { ConfirmSubmitMenuItem } from "@/components/confirm-submit-menu-item";
 
 const LITERS_PER_GALLON = 3.78541;
 
@@ -47,27 +51,7 @@ export default async function FuelingPage({ searchParams }: { searchParams?: { v
         icon={Fuel}
         actions={
           <div className="flex items-center gap-2">
-            <form className="hidden md:flex items-center gap-2" action="/fueling" method="get">
-              <div className="min-w-[220px]">
-                <Select name="vehicleId" defaultValue={vehicleId || "all"}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los vehículos" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los vehículos</SelectItem>
-                    {vehicles.map(v => (
-                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <input type="date" name="from" defaultValue={from || ""} className="border rounded px-2 py-1 text-sm" />
-              <span className="text-sm text-muted-foreground">a</span>
-              <input type="date" name="to" defaultValue={to || ""} className="border rounded px-2 py-1 text-sm" />
-              <Button type="submit" variant="outline">
-                <Filter className="mr-2 h-4 w-4" /> Filtros
-              </Button>
-            </form>
+            <FuelingFilters vehicles={vehicles} selectedVehicleId={vehicleId} from={from} to={to} />
             <FuelingExportButtons
               rows={logs.map(l => ({
                 plate: l.vehiclePlateNumber || vehicleMap.get(l.vehicleId) || l.vehicleId,
@@ -125,7 +109,7 @@ export default async function FuelingPage({ searchParams }: { searchParams?: { v
               {logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell className="font-medium">{log.vehiclePlateNumber}</TableCell>
-                  <TableCell>{format(new Date(log.fuelingDate), "PP")}</TableCell>
+                  <TableCell>{formatDateDDMMYYYY(log.fuelingDate)}</TableCell>
                   <TableCell>{log.mileageAtFueling.toLocaleString()} km</TableCell>
                   <TableCell>{(log.quantityLiters / LITERS_PER_GALLON).toFixed(2)}</TableCell>
                   <TableCell>C${(log.costPerLiter * LITERS_PER_GALLON).toFixed(2)}</TableCell>
@@ -147,15 +131,9 @@ export default async function FuelingPage({ searchParams }: { searchParams?: { v
                           <DropdownMenuItem>Editar Registro</DropdownMenuItem>
                         </Link>
                         <form action={async () => { "use server"; await deleteFuelingLog(log.id); }}>
-                          <DropdownMenuItem asChild>
-                            <button
-                              type="submit"
-                              className="w-full text-left text-red-600"
-                              onClick={(e) => { if (!confirm('¿Eliminar este registro de combustible? Esta acción no se puede deshacer.')) { e.preventDefault(); } }}
-                            >
-                              Eliminar
-                            </button>
-                          </DropdownMenuItem>
+                          <ConfirmSubmitMenuItem confirmMessage="¿Eliminar este registro de combustible? Esta acción no se puede deshacer.">
+                            Eliminar
+                          </ConfirmSubmitMenuItem>
                         </form>
                       </DropdownMenuContent>
                     </DropdownMenu>

@@ -26,9 +26,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import Image from "next/image";
 import { useState, useEffect, useMemo } from "react";
-import { getComparativeExpenseSummary } from "@/lib/actions/report-actions";
 import type { ComparativeExpenseSummary } from "@/lib/actions/report-actions";
-import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
@@ -89,14 +87,18 @@ export default function ComparativeExpenseAnalysisPage() {
       setIsLoading(true);
       try {
         if (vehicles.length === 0) {
-          const v = await getVehicles();
+          const resV = await fetch("/api/vehicles/list", { cache: "no-store" });
+          if (!resV.ok) throw new Error(`Error cargando vehículos: ${resV.status}`);
+          const v = await resV.json();
           setVehicles(v);
         }
-        const params: { startDate?: string; endDate?: string; vehicleId?: string } = {};
-        if (dateRange?.from) params.startDate = format(dateRange.from, "yyyy-MM-dd");
-        if (dateRange?.to) params.endDate = format(dateRange.to, "yyyy-MM-dd");
-        if (selectedVehicleId !== "all") params.vehicleId = selectedVehicleId;
-        const s = await getComparativeExpenseSummary(params);
+        const params = new URLSearchParams();
+        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
+        const res = await fetch(`/api/reports/comparative-expenses?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+        const s = await res.json();
         setSummary(s);
       } catch (error) {
         console.error("Error loading comparative summary:", error);
@@ -353,7 +355,7 @@ export default function ComparativeExpenseAnalysisPage() {
 
       <Card className="shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="text-2xl">
             Resumen de Gastos 
             {selectedVehicleInfo ? ` para ${selectedVehicleInfo.plateNumber}` : selectedVehicleId === "all" ? " (Todos los Vehículos)" : ""}
             {dateRange?.from && dateRange?.to ? ` (${format(dateRange.from, "P", {locale:es})} - ${format(dateRange.to, "P", {locale:es})})` : ""}
@@ -411,15 +413,15 @@ export default function ComparativeExpenseAnalysisPage() {
           {selectedVehicleId === "all" && !isLoading && comparativeData.vehicleBreakdown.length > 0 && (
             <>
               <h3 className="text-xl font-semibold my-4 text-primary">Desglose por Vehículo</h3>
-              <Table>
+              <Table className="text-base">
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Matrícula</TableHead>
-                    <TableHead>Marca y Modelo</TableHead>
-                    <TableHead className="text-right">Costo Mantenimiento (C$)</TableHead>
-                    <TableHead className="text-right">Costo Combustible (C$)</TableHead>
-                    <TableHead className="text-right">Costo Total (C$)</TableHead>
-                    <TableHead className="text-right">Km Recorridos</TableHead>
+                    <TableHead className="font-semibold">Matrícula</TableHead>
+                    <TableHead className="font-semibold">Marca y Modelo</TableHead>
+                    <TableHead className="text-right font-semibold">Costo Mantenimiento (C$)</TableHead>
+                    <TableHead className="text-right font-semibold">Costo Combustible (C$)</TableHead>
+                    <TableHead className="text-right font-semibold">Costo Total (C$)</TableHead>
+                    <TableHead className="text-right font-semibold">Km Recorridos</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
