@@ -27,6 +27,7 @@ import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { formatCurrency } from "@/lib/currency";
 
 export default function OverallVehicleCostsReportPage() {
   const [summaries, setSummaries] = useState<OverallVehicleCostSummary[]>([]);
@@ -110,9 +111,9 @@ export default function OverallVehicleCostsReportPage() {
       ...summaries.map(s => [
         s.plateNumber,
         s.brandModel,
-        `C$${s.totalFuelingCost.toFixed(2)}`,
-        `C$${s.totalMaintenanceCost.toFixed(2)}`,
-        `C$${s.grandTotalCost.toFixed(2)}`
+        formatCurrency(s.totalFuelingCost),
+        formatCurrency(s.totalMaintenanceCost),
+        formatCurrency(s.grandTotalCost)
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -231,7 +232,7 @@ export default function OverallVehicleCostsReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
@@ -246,9 +247,9 @@ export default function OverallVehicleCostsReportPage() {
                   <TableRow key={summary.vehicleId}>
                     <TableCell className="font-medium">{summary.plateNumber}</TableCell>
                     <TableCell>{summary.brandModel}</TableCell>
-                    <TableCell className="text-right">C${summary.totalFuelingCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">C${summary.totalMaintenanceCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-semibold">C${summary.grandTotalCost.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(summary.totalFuelingCost)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(summary.totalMaintenanceCost)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(summary.grandTotalCost)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -275,11 +276,11 @@ export default function OverallVehicleCostsReportPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis width={84} tickMargin={8} tickLine={false} axisLine={false}
-                  tickFormatter={(v) => new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(v))}
+                  tickFormatter={(v) => formatCurrency(Number(v))}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
                   const label = name === 'maint' ? 'Mantenimiento' : name === 'fuel' ? 'Combustible' : String(name);
-                  return `${label}: ${new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(value))}`;
+                  return `${label}: ${formatCurrency(Number(value))}`;
                 }} />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Bar dataKey="maint" fill="hsl(var(--chart-2))" radius={[6,6,0,0]} />

@@ -12,6 +12,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import Image from "next/image"; // Next.js Image component
+import { formatNumber, formatCurrency } from "@/lib/currency";
 
 interface DetailItemProps {
   icon: React.ElementType;
@@ -107,14 +108,14 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
               label="Tipo de Mantenimiento" 
               value={log.maintenanceType} 
               isBadge 
-              badgeClassName={log.maintenanceType === "Preventivo" ? "bg-blue-500 text-white" : "bg-orange-500 text-white"}
+              badgeClassName={log.maintenanceType === "Preventivo" ? "bg-green-600 text-white" : "bg-red-600 text-white"}
             />
             <DetailItem icon={CalendarDays} label="Fecha de Ejecución" value={formatDateDDMMYYYY(log.executionDate)} />
-            <DetailItem icon={Gauge} label="Kilometraje en Servicio" value={`${log.mileageAtService.toLocaleString()} km`} />
-            <DetailItem icon={DollarSign} label="Costo" value={`C$${log.cost.toFixed(2)}`} />
+            <DetailItem icon={Gauge} label="Kilometraje en Servicio" value={`${formatNumber(log.mileageAtService)} km`} />
+            <DetailItem icon={DollarSign} label="Costo" value={formatCurrency(log.cost)} />
             {log.provider && <DetailItem icon={Users} label="Proveedor" value={log.provider} />}
             {log.nextMaintenanceDateScheduled && <DetailItem icon={CalendarDays} label="Próximo Mantenimiento (Fecha)" value={formatDateDDMMYYYY(log.nextMaintenanceDateScheduled)} />}
-            {log.nextMaintenanceMileageScheduled && <DetailItem icon={Gauge} label="Próximo Mantenimiento (Kilometraje)" value={`${log.nextMaintenanceMileageScheduled.toLocaleString()} km`} />}
+            {log.nextMaintenanceMileageScheduled && <DetailItem icon={Gauge} label="Próximo Mantenimiento (Kilometraje)" value={`${formatNumber(log.nextMaintenanceMileageScheduled)} km`} />}
             <DetailItem icon={CalendarDays} label="Fecha de Creación del Registro" value={format(new Date(log.createdAt), "PPPp", { locale: es })} />
             {log.createdByUsername || log.createdByUserId ? (
               <DetailItem icon={UserIcon} label="Creado por" value={log.createdByUsername ?? `Usuario #${log.createdByUserId}`} />

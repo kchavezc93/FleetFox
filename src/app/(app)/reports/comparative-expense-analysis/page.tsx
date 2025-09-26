@@ -207,13 +207,13 @@ export default function ComparativeExpenseAnalysisPage() {
     // General Summary
     csvRows.push("Resumen General");
     csvRows.push(headers.join(','));
-    csvRows.push(`Costo Total Mantenimiento (C$),C$${comparativeData.totalMaintenanceCost.toFixed(2)}`);
-    csvRows.push(`Costo Total Combustible (C$),C$${comparativeData.totalFuelingCost.toFixed(2)}`);
-    csvRows.push(`Costo Total General (C$),C$${comparativeData.totalOverallCost.toFixed(2)}`);
-    csvRows.push(`Galones Totales Consumidos,${comparativeData.totalGallonsConsumed.toFixed(2)}`);
-    csvRows.push(`Kilómetros Recorridos,${comparativeData.kmDrivenInPeriod?.toLocaleString() ?? 'N/A'}`);
-    csvRows.push(`Costo por Km (C$),${comparativeData.costPerKm ? 'C$' + comparativeData.costPerKm.toFixed(2) : 'N/A'}`);
-    csvRows.push(`Eficiencia Prom. (km/gal),${comparativeData.avgFuelEfficiency ? comparativeData.avgFuelEfficiency.toFixed(1) : 'N/A'}`);
+  csvRows.push(`Costo Total Mantenimiento (C$),${formatCurrency(comparativeData.totalMaintenanceCost)}`);
+  csvRows.push(`Costo Total Combustible (C$),${formatCurrency(comparativeData.totalFuelingCost)}`);
+  csvRows.push(`Costo Total General (C$),${formatCurrency(comparativeData.totalOverallCost)}`);
+  csvRows.push(`Galones Totales Consumidos,${formatNumber(comparativeData.totalGallonsConsumed, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  csvRows.push(`Kilómetros Recorridos,${comparativeData.kmDrivenInPeriod != null ? formatNumber(comparativeData.kmDrivenInPeriod) : 'N/A'}`);
+  csvRows.push(`Costo por Km (C$),${comparativeData.costPerKm != null ? formatCurrency(comparativeData.costPerKm) : 'N/A'}`);
+  csvRows.push(`Eficiencia Prom. (km/gal),${comparativeData.avgFuelEfficiency != null ? formatNumber(comparativeData.avgFuelEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}`);
     csvRows.push(`Num. Registros Mantenimiento,${comparativeData.maintenanceLogCount}`);
     csvRows.push(`Num. Registros Combustible,${comparativeData.fuelingLogCount}`);
     csvRows.push(""); // Spacer
@@ -221,27 +221,27 @@ export default function ComparativeExpenseAnalysisPage() {
     // Vehicle Breakdown (if 'all' or specific vehicle has data)
     if (selectedVehicleId === "all" && comparativeData.vehicleBreakdown.length > 0) {
       csvRows.push("Desglose por Vehículo");
-      const vehicleHeaders = ["Matrícula", "Marca y Modelo", "Costo Mantenimiento (C$)", "Costo Combustible (C$)", "Costo Total (C$)", "Km Recorridos"];
+      const vehicleHeaders = ["Matrícula", "Marca y Modelo", "Costo Mantenimiento (C$)", "Costo Combustible (C$)", "Costo Total (C$)", "Km Recorridos"]; 
       csvRows.push(vehicleHeaders.join(','));
       comparativeData.vehicleBreakdown.forEach(v => {
         csvRows.push([
           v.plateNumber,
           v.brandModel,
-          `C$${v.maintenanceCost.toFixed(2)}`,
-          `C$${v.fuelingCost.toFixed(2)}`,
-          `C$${v.totalCost.toFixed(2)}`,
-          v.kmDriven?.toLocaleString() ?? 'N/A'
+          formatCurrency(v.maintenanceCost),
+          formatCurrency(v.fuelingCost),
+          formatCurrency(v.totalCost),
+          v.kmDriven != null ? formatNumber(v.kmDriven) : 'N/A'
         ].join(','));
       });
     } else if (selectedVehicleId !== "all") {
         const vehicleData = comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleId);
         if (vehicleData) {
             csvRows.push(`Detalle Vehículo: ${vehicleData.plateNumber}`);
-            csvRows.push(["Métrica", "Valor"].join(','));
-            csvRows.push(`Costo Mantenimiento (C$),C$${vehicleData.maintenanceCost.toFixed(2)}`);
-            csvRows.push(`Costo Combustible (C$),C$${vehicleData.fuelingCost.toFixed(2)}`);
-            csvRows.push(`Costo Total (C$),C$${vehicleData.totalCost.toFixed(2)}`);
-            csvRows.push(`Km Recorridos,${vehicleData.kmDriven?.toLocaleString() ?? 'N/A'}`);
+      csvRows.push(["Métrica", "Valor"].join(','));
+      csvRows.push(`Costo Mantenimiento (C$),${formatCurrency(vehicleData.maintenanceCost)}`);
+      csvRows.push(`Costo Combustible (C$),${formatCurrency(vehicleData.fuelingCost)}`);
+      csvRows.push(`Costo Total (C$),${formatCurrency(vehicleData.totalCost)}`);
+      csvRows.push(`Km Recorridos,${vehicleData.kmDriven != null ? formatNumber(vehicleData.kmDriven) : 'N/A'}`);
         }
     }
 
@@ -296,6 +296,50 @@ export default function ComparativeExpenseAnalysisPage() {
         icon={BarChartHorizontalBig}
         actions={
           <div className="page-header-actions flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2">
+              <div className="min-w-[220px]">
+                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar vehículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los vehículos</SelectItem>
+                    {vehicles.map(v => (<SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    defaultMonth={dateRange?.from}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">Rangos rápidos</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
@@ -447,7 +491,7 @@ export default function ComparativeExpenseAnalysisPage() {
           {selectedVehicleId === "all" && !isLoading && comparativeData.vehicleBreakdown.length > 0 && (
             <>
               <h3 className="text-xl font-semibold my-4 text-primary">Desglose por Vehículo</h3>
-              <Table className="text-base">
+              <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="font-semibold">Matrícula</TableHead>

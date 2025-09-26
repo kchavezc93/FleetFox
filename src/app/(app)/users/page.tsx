@@ -102,19 +102,20 @@ export default async function UserManagementPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left border-b">
-                    <th className="py-2 pr-4">Usuario</th>
-                    <th className="py-2 pr-4">Correo</th>
-                    <th className="py-2 pr-4">Rol</th>
-                    <th className="py-2 pr-4">Activo</th>
-                    <th className="py-2 pr-4 text-right">Acciones</th>
+                    <th className="px-4 py-2 md:py-3">Usuario</th>
+                    <th className="px-4 py-2 md:py-3">Correo</th>
+                    <th className="px-4 py-2 md:py-3">Rol</th>
+                    <th className="px-4 py-2 md:py-3">Estado</th>
+                    <th className="px-4 py-2 md:py-3 w-[120px]">Activo</th>
+                    <th className="px-4 py-2 md:py-3 text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map(u => (
                     <tr key={u.id} className="border-b">
-                      <td className="py-2 pr-4">{u.username}</td>
-                      <td className="py-2 pr-4">{u.email}</td>
-                      <td className="py-2 pr-4">
+                      <td className="px-4 py-2 md:py-3">{u.username}</td>
+                      <td className="px-4 py-2 md:py-3">{u.email}</td>
+                      <td className="px-4 py-2 md:py-3">
                         <Badge
                           variant="secondary"
                           className={u.role === "Admin" ? "bg-violet-600 text-white" : ""}
@@ -122,22 +123,22 @@ export default async function UserManagementPage() {
                           {u.role}
                         </Badge>
                       </td>
-                      <td className="py-2 pr-4">
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="secondary"
-                            className={((u as any).active ?? true) ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}
-                          >
-                            {((u as any).active ?? true) ? "Activo" : "Inactivo"}
-                          </Badge>
-                          <ActiveToggleCell
-                            active={(u as any).active ?? true}
-                            userId={u.id}
-                            action={toggleActive.bind(null, u.id, !((u as any).active ?? true))}
-                          />
-                        </div>
+                      <td className="px-4 py-2 md:py-3">
+                        <Badge
+                          variant="secondary"
+                          className={((u as any).active ?? true) ? "bg-emerald-500 text-white" : "bg-red-500 text-white"}
+                        >
+                          {((u as any).active ?? true) ? "Activo" : "Inactivo"}
+                        </Badge>
                       </td>
-                      <td className="py-2 pr-4 text-right">
+                      <td className="px-4 py-2 md:py-3">
+                        <ActiveToggleCell
+                          active={(u as any).active ?? true}
+                          userId={u.id}
+                          action={toggleActive.bind(null, u.id, !((u as any).active ?? true))}
+                        />
+                      </td>
+                      <td className="px-4 py-2 md:py-3 text-right">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0">

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import Image from "next/image";
 import { useState, useEffect } from "react";
+import { formatCurrency, formatNumber, getCurrency, getLocale } from "@/lib/currency";
 // Fetch data via API routes to avoid importing server actions into client components
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -109,16 +110,16 @@ export default function MaintenanceCostsReportPage() {
   const handleExportCSV = () => {
     if (summaries.length === 0) return;
 
-    const headers = ["Vehículo (Matrícula)", "Marca y Modelo", "Costo Preventivo (C$)", "Costo Correctivo (C$)", "Costo Total (C$)", "Núm. Registros"];
+  const headers = ["Vehículo (Matrícula)", "Marca y Modelo", "Costo Preventivo (C$)", "Costo Correctivo (C$)", "Costo Total (C$)", "Núm. Registros"];
     const csvRows = [
       headers.join(','),
       ...summaries.map(s => [
         s.plateNumber,
         s.brandModel,
-        `C$${s.totalPreventiveCost.toFixed(2)}`,
-        `C$${s.totalCorrectiveCost.toFixed(2)}`,
-        `C$${s.totalCost.toFixed(2)}`,
-        s.logCount
+        formatCurrency(s.totalPreventiveCost),
+        formatCurrency(s.totalCorrectiveCost),
+        formatCurrency(s.totalCost),
+        String(s.logCount)
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -237,7 +238,7 @@ export default function MaintenanceCostsReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de mantenimiento disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
@@ -253,9 +254,9 @@ export default function MaintenanceCostsReportPage() {
                   <TableRow key={summary.vehicleId}>
                     <TableCell className="font-medium">{summary.plateNumber}</TableCell>
                     <TableCell>{summary.brandModel}</TableCell>
-                    <TableCell className="text-right">C${summary.totalPreventiveCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">C${summary.totalCorrectiveCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right font-semibold">C${summary.totalCost.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(summary.totalPreventiveCost)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(summary.totalCorrectiveCost)}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(summary.totalCost)}</TableCell>
                     <TableCell className="text-right">{summary.logCount}</TableCell>
                   </TableRow>
                 ))}
@@ -283,11 +284,11 @@ export default function MaintenanceCostsReportPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis width={84} tickMargin={8} tickLine={false} axisLine={false}
-                  tickFormatter={(v) => new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(v))}
+                  tickFormatter={(v) => formatCurrency(Number(v))}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
                   const label = name === 'preventive' ? 'Preventivo' : name === 'corrective' ? 'Correctivo' : String(name);
-                  return `${label}: ${new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(value))}`;
+                  return `${label}: ${formatCurrency(Number(value))}`;
                 }} />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Bar dataKey="preventive" fill="hsl(var(--chart-1))" radius={[6,6,0,0]} />

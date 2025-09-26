@@ -4,7 +4,7 @@
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { History, FileDown, Printer } from "lucide-react";
+import { History, FileDown, Printer, CalendarDays } from "lucide-react";
 import { exportToXLSX } from "@/lib/export-excel";
 import type { MaintenanceLog, Vehicle } from "@/types";
 import {
@@ -20,7 +20,13 @@ import { format } from "date-fns";
 import { formatDateDDMMYYYY } from "@/lib/utils";
 import { es } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
-import MaintenanceFilters from "@/components/maintenance-filters";
+import { formatCurrency, formatNumber } from "@/lib/currency";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DateRange } from "react-day-picker";
+import { startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
 import { useSearchParams } from "next/navigation";
 
 interface EnrichedMaintenanceLog extends MaintenanceLog {
@@ -30,9 +36,16 @@ interface EnrichedMaintenanceLog extends MaintenanceLog {
 
 export default function MaintenanceHistoryReportPage() {
   const searchParams = useSearchParams();
-  const selectedVehicleId = searchParams.get('vehicleId') ?? undefined;
-  const from = searchParams.get('from') ?? undefined;
-  const to = searchParams.get('to') ?? undefined;
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string>(searchParams.get('vehicleId') ?? 'all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
+    const f = searchParams.get('from');
+    const t = searchParams.get('to');
+    if (f || t) {
+      return { from: f ? new Date(f + "T00:00:00Z") : undefined, to: t ? new Date(t + "T00:00:00Z") : undefined };
+    }
+    const today = new Date();
+    return { from: startOfMonth(today), to: endOfMonth(today) };
+  });
   const [enrichedLogs, setEnrichedLogs] = useState<EnrichedMaintenanceLog[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -42,9 +55,9 @@ export default function MaintenanceHistoryReportPage() {
       setIsLoading(true);
       try {
         const params = new URLSearchParams();
-        if (selectedVehicleId) params.set('vehicleId', selectedVehicleId);
-        if (from) params.set('from', from);
-        if (to) params.set('to', to);
+  if (selectedVehicleId && selectedVehicleId !== 'all') params.set('vehicleId', selectedVehicleId);
+  if (dateRange?.from) params.set('from', format(dateRange.from, 'yyyy-MM-dd'));
+  if (dateRange?.to) params.set('to', format(dateRange.to, 'yyyy-MM-dd'));
         const qs = params.toString();
         const resLogs = await fetch(`/api/maintenance/logs${qs ? `?${qs}` : ''}`, { cache: "no-store" });
         if (!resLogs.ok) throw new Error(`Error cargando logs: ${resLogs.status}`);
@@ -60,13 +73,17 @@ export default function MaintenanceHistoryReportPage() {
           return;
         }
 
-        const vehiclesMap = new Map(vehiclesData.map(v => [v.id, v]));
+  // Normalize vehicle IDs to strings for reliable lookup
+  const vehiclesMap = new Map(vehiclesData.map(v => [v.id?.toString(), v]));
 
-        const processedLogs = maintenanceLogsData.map(log => ({
-          ...log,
-          vehicleBrand: vehiclesMap.get(log.vehicleId)?.brand,
-          vehicleModel: vehiclesMap.get(log.vehicleId)?.model,
-        })).sort((a, b) => {
+        const processedLogs = maintenanceLogsData.map(log => {
+          const v = vehiclesMap.get(log.vehicleId?.toString());
+          return {
+            ...log,
+            vehicleBrand: v?.brand || undefined,
+            vehicleModel: v?.model || undefined,
+          } as EnrichedMaintenanceLog;
+        }).sort((a, b) => {
           // Sort by vehicle plate, then by execution date descending
           if (a.vehiclePlateNumber && b.vehiclePlateNumber && a.vehiclePlateNumber < b.vehiclePlateNumber) return -1;
           if (a.vehiclePlateNumber && b.vehiclePlateNumber && a.vehiclePlateNumber > b.vehiclePlateNumber) return 1;
@@ -82,7 +99,24 @@ export default function MaintenanceHistoryReportPage() {
       }
     }
     loadReportData();
-  }, [selectedVehicleId, from, to]);
+  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
+
+  const applyPreset = (preset: string) => {
+    const today = new Date();
+    let f = today; let t = today;
+    switch (preset) {
+      case 'last7': f = subDays(today, 6); break;
+      case 'last30': f = subDays(today, 29); break;
+      case 'last90': f = subDays(today, 89); break;
+      case 'thisMonth': f = startOfMonth(today); t = endOfMonth(today); break;
+      case 'lastMonth': {
+        const prev = subMonths(today, 1);
+        f = startOfMonth(prev); t = endOfMonth(prev); break;
+      }
+      case 'ytd': f = startOfYear(today); break;
+    }
+    setDateRange({ from: f, to: t });
+  };
 
   const handlePrint = () => {
     window.print();
@@ -95,12 +129,12 @@ export default function MaintenanceHistoryReportPage() {
     const csvRows = [
       headers.join(','),
       ...enrichedLogs.map(log => [
-        log.vehiclePlateNumber,
-        `${log.vehicleBrand || ''} ${log.vehicleModel || ''}`.trim(),
+  log.vehiclePlateNumber,
+  `${log.vehicleBrand || ''} ${log.vehicleModel || ''}`.trim(),
   formatDateDDMMYYYY(log.executionDate),
         log.maintenanceType,
-        log.mileageAtService.toLocaleString(),
-        `C$${log.cost.toFixed(2)}`,
+        formatNumber(log.mileageAtService),
+        formatCurrency(log.cost),
         log.provider
       ].join(','))
     ];
@@ -151,7 +185,52 @@ export default function MaintenanceHistoryReportPage() {
         icon={History}
         actions={
           <div className="page-header-actions flex items-center gap-2">
-            <MaintenanceFilters vehicles={vehicles} selectedVehicleId={selectedVehicleId ?? undefined} from={from ?? undefined} to={to ?? undefined} />
+            <div className="hidden md:flex items-center gap-2">
+              <div className="min-w-[220px]">
+                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar vehículo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los vehículos</SelectItem>
+                    {vehicles.map(v => (
+                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    numberOfMonths={2}
+                    selected={dateRange}
+                    onSelect={setDateRange}
+                    defaultMonth={dateRange?.from}
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">Rangos rápidos</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuItem onClick={() => applyPreset('last7')}>Últimos 7 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset('last30')}>Últimos 30 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset('last90')}>Últimos 90 días</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset('thisMonth')}>Este mes</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset('lastMonth')}>Mes anterior</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => applyPreset('ytd')}>Año en curso (YTD)</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
@@ -179,7 +258,7 @@ export default function MaintenanceHistoryReportPage() {
           ) : enrichedLogs.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de mantenimiento disponibles para generar el informe. Verifique la implementación de la base de datos.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
@@ -195,16 +274,19 @@ export default function MaintenanceHistoryReportPage() {
                 {enrichedLogs.map(log => (
                   <TableRow key={log.id}>
                     <TableCell className="font-medium">{log.vehiclePlateNumber}</TableCell>
-                    <TableCell>{log.vehicleBrand} {log.vehicleModel}</TableCell>
+                    <TableCell>{`${log.vehicleBrand || ''} ${log.vehicleModel || ''}`.trim()}</TableCell>
                     <TableCell>{formatDateDDMMYYYY(log.executionDate)}</TableCell>
                     <TableCell>
-                      <Badge variant={log.maintenanceType === "Preventivo" ? "default" : "secondary"} 
-                             className={log.maintenanceType === "Preventivo" ? "bg-blue-500 text-white" : "bg-orange-500 text-white"}>
+                      <Badge className={
+                        log.maintenanceType === "Preventivo"
+                          ? "bg-green-600 text-white"
+                          : "bg-red-600 text-white"
+                      }>
                         {log.maintenanceType}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right">{log.mileageAtService.toLocaleString()} km</TableCell>
-                    <TableCell className="text-right font-medium">C${log.cost.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{formatNumber(log.mileageAtService)} km</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(log.cost)}</TableCell>
                     <TableCell>{log.provider}</TableCell>
                   </TableRow>
                 ))}

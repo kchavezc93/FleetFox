@@ -149,7 +149,9 @@ type GenerateOptions = {
   maintenanceCostWindowDays?: number; // e.g., 30 days
 };
 
-// Generate alerts based on business rules. Idempotent-ish: avoids duplicates of open alerts.
+// Generate alerts based on business rules. Idempotent: avoids duplicates by key
+// (vehicleId + alertType [+ dueDate]) or within a recent window, even if a prior
+// alert fue Resuelta.
 export async function generateAlerts(options: GenerateOptions = {}): Promise<{ success: boolean; created: number; message: string }> {
   const dbClient = await getDbClient();
   if (!dbClient || dbClient.type !== "SQLServer" || !(dbClient as any).pool) {
@@ -173,7 +175,8 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
     const expiringDocs = await getExpiringDocuments(daysThreshold);
     for (const d of expiringDocs) {
       const msg = `${d.documentType}${d.documentNumber ? ` #${d.documentNumber}` : ""} vence en ${d.daysToExpiry} días (${d.expiryDate}).`;
-      const exists = await existsOpenSimilar(pool, d.vehicleId, "DocumentExpiry", d.expiryDate);
+      // Evitar duplicados por llave (vehículo+tipo+dueDate) aunque hayan sido resueltos
+      const exists = await existsSimilar(pool, d.vehicleId, "DocumentExpiry", { dueDate: d.expiryDate, includeResolved: true });
       if (!exists) {
         await createAlert({ vehicleId: d.vehicleId, alertType: "DocumentExpiry", message: msg, dueDate: d.expiryDate, status: "Nueva", severity: d.daysToExpiry <= 7 ? "High" : "Medium", actorUserId });
         created++;
@@ -186,7 +189,8 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
       const dueDate = item.nextPreventiveMaintenanceDate ?? undefined;
       const message = `Mantenimiento preventivo próximo por ${item.reason}.`;
       const severity: Alert["severity"] = item.reason === "Ambos" ? "High" : "Medium";
-      const exists = await existsOpenSimilar(pool, item.vehicleId, "PreventiveMaintenanceDue", dueDate);
+      // Si hay dueDate, dedup por llave; si no, dedup por ventana de 14 días
+      const exists = await existsSimilar(pool, item.vehicleId, "PreventiveMaintenanceDue", { dueDate, withinDays: dueDate ? undefined : 14, includeResolved: true });
       if (!exists) {
         await createAlert({ vehicleId: item.vehicleId, alertType: "PreventiveMaintenanceDue", message, dueDate, status: "Nueva", severity, actorUserId });
         created++;
@@ -198,7 +202,8 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
     for (const s of effStats) {
       if (s.averageEfficiency != null && s.averageEfficiency < lowEffThreshold) {
         const msg = `Eficiencia baja (${s.averageEfficiency.toFixed(1)} km/gal < ${lowEffThreshold}).`;
-        const exists = await existsOpenSimilar(pool, s.vehicleId, "LowMileageEfficiency");
+        // Evitar spam: si ya hubo una alerta de baja eficiencia en últimos 30 días, no duplicar
+        const exists = await existsSimilar(pool, s.vehicleId, "LowMileageEfficiency", { withinDays: 30, includeResolved: true });
         if (!exists) {
           await createAlert({ vehicleId: s.vehicleId, alertType: "LowMileageEfficiency", message: msg, status: "Nueva", severity: "Medium", actorUserId });
           created++;
@@ -214,7 +219,8 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
     for (const c of maintCosts) {
       if (c.totalCost > highMaintThreshold) {
         const msg = `Costo de mantenimiento alto en ${windowDays} días (C$ ${c.totalCost.toFixed(2)} > C$ ${highMaintThreshold.toFixed(2)}).`;
-        const exists = await existsOpenSimilar(pool, c.vehicleId, "HighMaintenanceCost");
+        // Dedup dentro de la misma ventana de evaluación
+        const exists = await existsSimilar(pool, c.vehicleId, "HighMaintenanceCost", { withinDays: windowDays, includeResolved: true });
         if (!exists) {
           await createAlert({ vehicleId: c.vehicleId, alertType: "HighMaintenanceCost", message: msg, status: "Nueva", severity: "High", actorUserId });
           created++;
@@ -231,14 +237,32 @@ export async function generateAlerts(options: GenerateOptions = {}): Promise<{ s
   }
 }
 
-async function existsOpenSimilar(pool: sql.ConnectionPool, vehicleId: string, alertType: string, dueDate?: string) {
+// Check for existing similar alert, optionally within a recent time window, and
+// optionally including resolved ones. If dueDate is provided, use it as part of
+// the uniqueness key; otherwise use createdAt within 'withinDays' when provided.
+async function existsSimilar(
+  pool: sql.ConnectionPool,
+  vehicleId: string,
+  alertType: string,
+  opts: { dueDate?: string; withinDays?: number; includeResolved?: boolean } = { includeResolved: true }
+) {
   const req = pool.request();
   req.input("vehicleId", sql.NVarChar(50), vehicleId);
   req.input("alertType", sql.NVarChar(100), alertType);
-  if (dueDate) req.input("dueDate", sql.Date, dueDate);
-  const whereDue = dueDate ? "AND (a.dueDate = @dueDate OR a.dueDate IS NULL)" : "";
+  let where = "a.vehicleId = @vehicleId AND a.alertType = @alertType";
+  if (opts.dueDate) {
+    req.input("dueDate", sql.Date, opts.dueDate);
+    where += " AND (a.dueDate = @dueDate OR a.dueDate IS NULL)";
+  }
+  if (opts.withinDays && opts.withinDays > 0) {
+    req.input("days", sql.Int, opts.withinDays);
+    where += " AND a.createdAt >= DATEADD(day, -@days, GETDATE())";
+  }
+  if (opts.includeResolved === false) {
+    where += " AND a.status <> N'Resuelta'";
+  }
   const result = await req.query(`
-    SELECT TOP 1 a.id FROM alerts a WHERE a.vehicleId = @vehicleId AND a.alertType = @alertType AND a.status <> N'Resuelta' ${whereDue};
+    SELECT TOP 1 a.id FROM alerts a WHERE ${where};
   `);
   return result.recordset.length > 0;
 }

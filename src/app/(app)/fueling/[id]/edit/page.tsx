@@ -17,7 +17,9 @@ export default async function EditFuelingPage({ params }: { params: Promise<{ id
     getVehicles(),
   ]);
   if (!log) notFound();
+  // Mostrar activos + el vehículo del registro (aunque esté inactivo) para que aparezca seleccionado
   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+  const displayVehicles = vehicles.filter(v => (v.status === 'Activo' || v.status === 'En Taller') || v.id === log!.vehicleId);
 
   async function submit(data: any) {
     "use server";
@@ -39,9 +41,10 @@ export default async function EditFuelingPage({ params }: { params: Promise<{ id
       <Card className="shadow-lg">
         <CardContent className="p-6">
           <FuelingForm
-            vehicles={activeVehicles}
+            vehicles={displayVehicles}
             onSubmitAction={submit as any}
             initial={{
+              id,
               vehicleId: log!.vehicleId,
               fuelingDate: new Date(log!.fuelingDate + 'T00:00:00'),
               mileageAtFueling: log!.mileageAtFueling,

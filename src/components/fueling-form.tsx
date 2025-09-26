@@ -144,7 +144,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
   const form = useForm<FuelingLogSchema>({
     resolver: zodResolver(fuelingLogSchema),
     defaultValues: {
-      vehicleId: initial?.vehicleId || "",
+      vehicleId: initial?.vehicleId ? String(initial.vehicleId).trim() : "",
       fuelingDate: initial?.fuelingDate ? (initial.fuelingDate instanceof Date ? initial.fuelingDate : new Date(initial.fuelingDate)) : new Date(), 
       mileageAtFueling: initial?.mileageAtFueling ?? 0,
       quantityLiters: initial?.quantityLiters ?? 0, 
@@ -156,6 +156,18 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
       // schema tiene defaults para arrays a nivel zod; no es necesario incluir aquí
     },
   });
+
+  // Normalizar explícitamente el vehicleId al montar/actualizar props para evitar desajustes (espacios/tipos)
+  React.useEffect(() => {
+    if (initial?.vehicleId != null) {
+      const normalized = String(initial.vehicleId).trim();
+      const current = form.getValues("vehicleId") || "";
+      if (current !== normalized) {
+        form.setValue("vehicleId", normalized, { shouldValidate: true });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial?.vehicleId]);
 
   const quantity = form.watch("quantityLiters");
   const costPerUnit = form.watch("costPerLiter"); 
@@ -225,7 +237,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Vehículo *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={field.onChange} value={field.value} disabled={Boolean(initial?.id)}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccione un vehículo" />
@@ -233,7 +245,7 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
                   </FormControl>
                   <SelectContent>
                     {vehicles.map((vehicle) => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                      <SelectItem key={vehicle.id} value={String(vehicle.id).trim()}>
                         {vehicle.plateNumber} ({vehicle.brand} {vehicle.model})
                       </SelectItem>
                     ))}

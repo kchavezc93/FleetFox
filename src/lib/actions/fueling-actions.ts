@@ -13,6 +13,68 @@ import { getCurrentUser } from "@/lib/auth/session";
 
 const LITERS_PER_GALLON = 3.78541;
 
+// Recalcula en cascada la eficiencia (km/gal) desde una fecha dada hacia adelante para un vehículo.
+// Usa como base el último registro ANTERIOR a la fecha de inicio, y recorre
+// los registros a partir de esa fecha en orden ascendente (fecha, createdAt, id),
+// actualizando fuelEfficiencyKmPerGallon para cada uno según (km recorridos / galones de la carga actual).
+async function recalcEfficienciesFrom(
+  transaction: sql.Transaction,
+  vehicleId: string,
+  startingDateUtc: Date
+): Promise<void> {
+  // Normalizar vehicleId a string válida
+  const vehicleIdNorm = (vehicleId != null) ? String(vehicleId).trim() : '';
+  if (!vehicleIdNorm) return;
+  // Buscar el último registro anterior a la fecha de inicio para establecer la base de kilometraje
+  const prevReq = transaction.request();
+  prevReq.input('vId_prev', sql.NVarChar(50), vehicleIdNorm);
+  prevReq.input('startDate', sql.Date, startingDateUtc);
+  const prevRes = await prevReq.query(`
+    SELECT TOP 1 id, mileageAtFueling, fuelingDate, createdAt
+    FROM fueling_logs
+    WHERE vehicleId = @vId_prev AND fuelingDate < @startDate
+    ORDER BY fuelingDate DESC, createdAt DESC, id DESC
+  `);
+  let prevMileage: number | null = prevRes.recordset.length > 0 ? Number(prevRes.recordset[0].mileageAtFueling) : null;
+
+  // Obtener todos los registros desde la fecha de inicio en adelante, en orden ascendente para calcular sobre la marcha
+  const seqReq = transaction.request();
+  seqReq.input('vId', sql.NVarChar(50), vehicleIdNorm);
+  seqReq.input('startDate', sql.Date, startingDateUtc);
+  const seqRes = await seqReq.query(`
+    SELECT id, mileageAtFueling, quantityLiters, fuelingDate, createdAt
+    FROM fueling_logs
+    WHERE vehicleId = @vId AND fuelingDate >= @startDate
+    ORDER BY fuelingDate ASC, createdAt ASC, id ASC
+  `);
+
+  for (const row of seqRes.recordset) {
+    let eff: number | null = null;
+    if (prevMileage != null) {
+      const mileageDiff = Number(row.mileageAtFueling) - prevMileage;
+      const gallons = parseFloat(row.quantityLiters) / LITERS_PER_GALLON;
+      if (gallons > 0 && mileageDiff > 0) {
+        eff = parseFloat((mileageDiff / gallons).toFixed(1));
+      }
+    }
+    const updReq = transaction.request();
+    updReq.input('id_upd_eff', sql.Int, Number(row.id));
+    // Si eff es null, guardamos NULL
+    if (eff === null) {
+      await updReq.query(`
+        UPDATE fueling_logs SET fuelEfficiencyKmPerGallon = NULL WHERE id = @id_upd_eff;
+      `);
+    } else {
+      updReq.input('eff_val', sql.Decimal(10, 1), eff);
+      await updReq.query(`
+        UPDATE fueling_logs SET fuelEfficiencyKmPerGallon = @eff_val WHERE id = @id_upd_eff;
+      `);
+    }
+    // Avanzar la base
+    prevMileage = Number(row.mileageAtFueling);
+  }
+}
+
 export async function createFuelingLog(formData: FuelingFormData) {
   const validatedFields = fuelingLogSchema.safeParse(formData);
 
@@ -59,11 +121,12 @@ export async function createFuelingLog(formData: FuelingFormData) {
       const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
       await transaction.begin();
 
+  const vehicleIdNorm = String(data.vehicleId).trim();
       let vehiclePlateNumber = "N/A";
       let originalVehicleMileage = 0; 
       
       const vehicleRequest = transaction.request(); 
-      vehicleRequest.input('vehicleIdForMeta', sql.NVarChar(50), data.vehicleId);
+  vehicleRequest.input('vehicleIdForMeta', sql.NVarChar(50), vehicleIdNorm);
       const vehicleResult = await vehicleRequest.query('SELECT plateNumber, currentMileage FROM vehicles WHERE id = @vehicleIdForMeta');
       
       if (vehicleResult.recordset.length > 0) {
@@ -75,10 +138,10 @@ export async function createFuelingLog(formData: FuelingFormData) {
           return { message: "Vehículo asociado no encontrado. No se puede crear el registro de combustible.", errors: { vehicleId: "ID de vehículo no válido." }, success: false };
       }
 
-      let fuelEfficiencyKmPerGallon: number | null = null;
+  let fuelEfficiencyKmPerGallon: number | null = null;
       
       const prevLogRequest = transaction.request(); 
-      prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), data.vehicleId);
+      prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), vehicleIdNorm);
   prevLogRequest.input('prev_fuelingDate_eff', sql.Date, fuelingDateUtc); 
       const prevLogResult = await prevLogRequest.query(`
           SELECT TOP 1 mileageAtFueling, quantityLiters 
@@ -89,6 +152,15 @@ export async function createFuelingLog(formData: FuelingFormData) {
 
       if (prevLogResult.recordset.length > 0) {
           const prevLog = prevLogResult.recordset[0];
+          // Validación: el kilometraje nuevo no puede ser menor que el último previo a la fecha
+          if (data.mileageAtFueling < prevLog.mileageAtFueling) {
+            await transaction.rollback();
+            return {
+              message: `El kilometraje (${data.mileageAtFueling}) no puede ser menor que el último registro previo (${prevLog.mileageAtFueling}).`,
+              errors: { mileageAtFueling: 'El kilometraje debe ser mayor o igual al del registro anterior.' },
+              success: false,
+            };
+          }
           const mileageDifference = data.mileageAtFueling - prevLog.mileageAtFueling;
           const gallonsUsedCurrent = data.quantityLiters / LITERS_PER_GALLON; 
           if (gallonsUsedCurrent > 0 && mileageDifference > 0) {
@@ -97,7 +169,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
       }
       
       const logRequest = transaction.request(); 
-      logRequest.input('fl_vehicleId', sql.NVarChar(50), data.vehicleId);
+  logRequest.input('fl_vehicleId', sql.NVarChar(50), vehicleIdNorm);
       logRequest.input('fl_vehiclePlateNumber', sql.NVarChar(50), vehiclePlateNumber); 
   logRequest.input('fl_fuelingDate', sql.Date, fuelingDateUtc); 
       logRequest.input('fl_mileageAtFueling', sql.Int, data.mileageAtFueling);
@@ -144,7 +216,7 @@ export async function createFuelingLog(formData: FuelingFormData) {
 
       if (data.mileageAtFueling > originalVehicleMileage) {
           const updateVehicleRequest = transaction.request(); 
-          updateVehicleRequest.input('upd_v_id_mileage', sql.NVarChar(50), data.vehicleId);
+          updateVehicleRequest.input('upd_v_id_mileage', sql.NVarChar(50), vehicleIdNorm);
           updateVehicleRequest.input('upd_v_mileage_val', sql.Int, data.mileageAtFueling);
           await updateVehicleRequest.query(`UPDATE vehicles SET currentMileage = @upd_v_mileage_val, updatedByUserId = ${userIdInt !== null ? userIdInt : 'NULL'}, updatedAt = GETDATE() WHERE id = @upd_v_id_mileage`);
       }
@@ -205,7 +277,10 @@ export async function createFuelingLog(formData: FuelingFormData) {
         `);
       }
       
-      await transaction.commit();
+  // Recalcular en cascada desde la fecha del nuevo registro para asegurar trazabilidad
+  await recalcEfficienciesFrom(transaction, vehicleIdNorm, fuelingDateUtc);
+
+  await transaction.commit();
       // PRODUCCIÓN: logger.info({ action: 'createFuelingLog', logId: newLog.id, vehicleId: newLog.vehicleId }, "Fueling log created successfully");
   revalidatePath("/fueling");
   revalidatePath("/fueling/mobile");
@@ -489,10 +564,21 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     const userIdInt = currentUser ? parseInt(currentUser.id, 10) : null;
     await transaction.begin();
 
+    // Obtener el registro actual para detectar cambios de vehículo/fecha
+    const beforeReq = transaction.request();
+    beforeReq.input('id_find_before', sql.NVarChar(50), id);
+    const beforeRes = await beforeReq.query(`
+      SELECT TOP 1 vehicleId AS oldVehicleId, fuelingDate AS oldFuelingDate
+      FROM fueling_logs WHERE id = @id_find_before
+    `);
+  const oldVehicleId: string | null = beforeRes.recordset?.[0]?.oldVehicleId ? String(beforeRes.recordset[0].oldVehicleId).trim() : null;
+    const oldFuelingDate: Date | null = beforeRes.recordset?.[0]?.oldFuelingDate ?? null;
+
     // Recalcular eficiencia usando registro previo
     let fuelEfficiencyKmPerGallon: number | null = null;
     const prevLogRequest = transaction.request();
-    prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), data.vehicleId);
+    // Normalizar vehicleId para búsqueda del registro previo
+    prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), String(data.vehicleId).trim());
   prevLogRequest.input('prev_fuelingDate_eff', sql.Date, fuelingDateUtc);
     prevLogRequest.input('currentId', sql.NVarChar(50), id);
     const prevLogResult = await prevLogRequest.query(`
@@ -503,6 +589,15 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     `);
     if (prevLogResult.recordset.length > 0) {
       const prevLog = prevLogResult.recordset[0];
+      // Validación: el kilometraje nuevo no puede ser menor que el último previo a la fecha
+      if (data.mileageAtFueling < prevLog.mileageAtFueling) {
+        await transaction.rollback();
+        return {
+          message: `El kilometraje (${data.mileageAtFueling}) no puede ser menor que el último registro previo (${prevLog.mileageAtFueling}).`,
+          errors: { mileageAtFueling: 'El kilometraje debe ser mayor o igual al del registro anterior.' },
+          success: false,
+        };
+      }
       const mileageDifference = data.mileageAtFueling - prevLog.mileageAtFueling;
       const gallonsUsedCurrent = data.quantityLiters / LITERS_PER_GALLON;
       if (gallonsUsedCurrent > 0 && mileageDifference > 0) {
@@ -512,14 +607,14 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
 
     // Metadatos del vehículo
     const vehicleMetaReq = transaction.request();
-    vehicleMetaReq.input('vId_meta', sql.NVarChar(50), data.vehicleId);
+  vehicleMetaReq.input('vId_meta', sql.NVarChar(50), String(data.vehicleId).trim());
     const vehicleMeta = await vehicleMetaReq.query('SELECT plateNumber, currentMileage FROM vehicles WHERE id = @vId_meta');
     const vehiclePlateNumber = vehicleMeta.recordset[0]?.plateNumber || 'N/A';
     const originalVehicleMileage = vehicleMeta.recordset[0]?.currentMileage || 0;
 
     const updReq = transaction.request();
     updReq.input('id_upd', sql.NVarChar(50), id);
-    updReq.input('vId', sql.NVarChar(50), data.vehicleId);
+  updReq.input('vId', sql.NVarChar(50), String(data.vehicleId).trim());
   updReq.input('date', sql.Date, fuelingDateUtc);
     updReq.input('mileage', sql.Int, data.mileageAtFueling);
     updReq.input('liters', sql.Decimal(10, 2), data.quantityLiters);
@@ -551,7 +646,7 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
 
     if (data.mileageAtFueling > originalVehicleMileage) {
       const updateVehicleRequest = transaction.request();
-      updateVehicleRequest.input('vId', sql.NVarChar(50), data.vehicleId);
+  updateVehicleRequest.input('vId', sql.NVarChar(50), String(data.vehicleId).trim());
       updateVehicleRequest.input('mileageVal', sql.Int, data.mileageAtFueling);
       await updateVehicleRequest.query(`
         UPDATE vehicles 
@@ -627,6 +722,21 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
       `);
     }
 
+    // Recalcular eficiencias a partir del punto de impacto
+    if (oldVehicleId && oldFuelingDate) {
+      if (oldVehicleId === data.vehicleId) {
+        const minDate = oldFuelingDate < fuelingDateUtc ? oldFuelingDate : fuelingDateUtc;
+        await recalcEfficienciesFrom(transaction, data.vehicleId, minDate);
+      } else {
+        // Se movió a otro vehículo: recalcular cadenas en ambos
+        await recalcEfficienciesFrom(transaction, oldVehicleId, oldFuelingDate);
+        await recalcEfficienciesFrom(transaction, data.vehicleId, fuelingDateUtc);
+      }
+    } else {
+      // Seguridad: si no pudimos leer el anterior, al menos recalcular desde la nueva fecha
+      await recalcEfficienciesFrom(transaction, data.vehicleId, fuelingDateUtc);
+    }
+
     await transaction.commit();
     revalidatePath('/fueling');
     // Revalidate detail view and mobile route to reflect latest vouchers
@@ -675,14 +785,32 @@ export async function deleteFuelingLog(id: string) {
     return { message: 'Tipo de BD no soportado o pool no disponible.', success: false };
   }
   const pool = (dbClient as any).pool as sql.ConnectionPool;
+  const transaction = new sql.Transaction(pool);
   try {
-    const req = pool.request();
+    await transaction.begin();
+    // Obtener datos previos para recalcular cadena luego del borrado
+    const beforeReq = transaction.request();
+    beforeReq.input('id_find_before', sql.NVarChar(50), id);
+    const beforeRes = await beforeReq.query(`
+      SELECT TOP 1 vehicleId AS vId, fuelingDate AS fDate FROM fueling_logs WHERE id = @id_find_before
+    `);
+    const oldVehicleId: string | null = beforeRes.recordset?.[0]?.vId ?? null;
+    const oldFuelingDate: Date | null = beforeRes.recordset?.[0]?.fDate ?? null;
+
+    const req = transaction.request();
     req.input('id_del', sql.NVarChar(50), id);
     await req.query('DELETE FROM fueling_logs WHERE id = @id_del');
+
+    if (oldVehicleId && oldFuelingDate) {
+      await recalcEfficienciesFrom(transaction, oldVehicleId, oldFuelingDate);
+    }
+
+    await transaction.commit();
     revalidatePath('/fueling');
     revalidatePath('/reports/fuel-consumption');
     return { message: 'Registro de combustible eliminado.', success: true };
   } catch (err) {
+    try { await transaction.rollback(); } catch {}
     console.error(`[SQL Server Error] deleteFuelingLog`, err);
     return { message: 'Error al eliminar el registro.', success: false };
   }

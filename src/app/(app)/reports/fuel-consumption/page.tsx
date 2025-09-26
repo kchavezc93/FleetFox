@@ -27,7 +27,7 @@ import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { getCurrency, getLocale } from "@/lib/currency";
+import { formatCurrency, formatNumber, getCurrency, getLocale } from "@/lib/currency";
 
 export default function FuelConsumptionReportPage() {
   const [summaries, setSummaries] = useState<FuelConsumptionSummary[]>([]);
@@ -111,9 +111,9 @@ export default function FuelConsumptionReportPage() {
       ...summaries.map(s => [
         s.plateNumber,
         s.brandModel,
-        s.totalGallons.toFixed(2),
-        `C$${s.totalCost.toFixed(2)}`,
-        s.avgEfficiency ? s.avgEfficiency.toFixed(1) : 'N/A',
+        formatNumber(s.totalGallons, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        formatCurrency(s.totalCost),
+        s.avgEfficiency ? formatNumber(s.avgEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A',
         s.logCount
       ].join(','))
     ];
@@ -235,7 +235,7 @@ export default function FuelConsumptionReportPage() {
           ) : summaries.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de combustible disponibles para generar el informe. Verifique la implementación de la conexión con la base de datos y los registros existentes.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
@@ -251,9 +251,9 @@ export default function FuelConsumptionReportPage() {
                   <TableRow key={summary.vehicleId}>
                     <TableCell className="font-medium">{summary.plateNumber}</TableCell>
                     <TableCell>{summary.brandModel}</TableCell>
-                    <TableCell className="text-right">{summary.totalGallons.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">C${summary.totalCost.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">{summary.avgEfficiency ? summary.avgEfficiency.toFixed(1) : 'N/A'}</TableCell>
+                    <TableCell className="text-right">{formatNumber(summary.totalGallons, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(summary.totalCost)}</TableCell>
+                    <TableCell className="text-right">{summary.avgEfficiency ? formatNumber(summary.avgEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}</TableCell>
                     <TableCell className="text-right">{summary.logCount}</TableCell>
                   </TableRow>
                 ))}
@@ -282,11 +282,11 @@ export default function FuelConsumptionReportPage() {
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
                 <YAxis yAxisId="left" tickLine={false} axisLine={false} width={72} tickMargin={8} />
                 <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={84} tickMargin={8}
-                  tickFormatter={(v) => new Intl.NumberFormat(getLocale(), { style: 'currency', currency: getCurrency() }).format(Number(v))}
+                  tickFormatter={(v) => formatCurrency(Number(v))}
                 />
                 <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
-                  if (name === 'gallons') return `Galones: ${Number(value).toFixed(2)}`;
-                  if (name === 'cost') return `Costo: ${new Intl.NumberFormat(getLocale(), { style: 'currency', currency: getCurrency() }).format(Number(value))}`;
+                  if (name === 'gallons') return `Galones: ${formatNumber(Number(value), { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  if (name === 'cost') return `Costo: ${formatCurrency(Number(value))}`;
                   return String(value);
                 }} />
                 <ChartLegend content={<ChartLegendContent />} />

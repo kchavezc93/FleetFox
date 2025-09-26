@@ -125,6 +125,11 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_fueling_date' AND obje
   CREATE INDEX IX_fueling_date ON dbo.fueling_logs(fuelingDate);
 GO
 
+-- Helpful composite index for sequential recalculation scans
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_fueling_vehicle_date_created' AND object_id = OBJECT_ID('dbo.fueling_logs'))
+  CREATE INDEX IX_fueling_vehicle_date_created ON dbo.fueling_logs(vehicleId, fuelingDate ASC, createdAt ASC, id ASC);
+GO
+
 /* 5) Fueling vouchers */
 IF OBJECT_ID('dbo.fueling_vouchers', 'U') IS NULL
 BEGIN
@@ -241,7 +246,58 @@ BEGIN
 END
 GO
 
-/* 9) Audit events */
+/* 9) Alerts */
+IF OBJECT_ID('dbo.alerts', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.alerts (
+    id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    vehicleId NVARCHAR(50) NOT NULL,
+    alertType NVARCHAR(100) NOT NULL,
+    message NVARCHAR(MAX) NOT NULL,
+    dueDate DATE NULL,
+    status NVARCHAR(20) NOT NULL,
+    severity NVARCHAR(20) NULL,
+    createdAt DATETIME2 NOT NULL CONSTRAINT DF_alerts_createdAt DEFAULT(SYSUTCDATETIME()),
+    resolvedAt DATETIME2 NULL,
+    createdByUserId INT NULL,
+    updatedByUserId INT NULL,
+    -- Computed date-only column for per-day uniqueness when dueDate is NULL
+    createdDate AS CAST(createdAt AS DATE) PERSISTED,
+    CONSTRAINT FK_alerts_createdBy FOREIGN KEY (createdByUserId) REFERENCES dbo.users(id),
+    CONSTRAINT FK_alerts_updatedBy FOREIGN KEY (updatedByUserId) REFERENCES dbo.users(id)
+  );
+END
+GO
+
+-- Ensure computed column exists if table pre-existed without it
+IF OBJECT_ID('dbo.alerts','U') IS NOT NULL AND COL_LENGTH('dbo.alerts','createdDate') IS NULL
+BEGIN
+  ALTER TABLE dbo.alerts ADD createdDate AS CAST(createdAt AS DATE) PERSISTED;
+END
+GO
+
+-- Helpful non-unique indexes
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_alerts_status_createdAt' AND object_id = OBJECT_ID('dbo.alerts'))
+  CREATE INDEX IX_alerts_status_createdAt ON dbo.alerts(status, createdAt);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_alerts_vehicle' AND object_id = OBJECT_ID('dbo.alerts'))
+  CREATE INDEX IX_alerts_vehicle ON dbo.alerts(vehicleId);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_alerts_type' AND object_id = OBJECT_ID('dbo.alerts'))
+  CREATE INDEX IX_alerts_type ON dbo.alerts(alertType);
+GO
+
+-- De-duplication unique indexes
+-- 1) Exact key uniqueness when dueDate IS NOT NULL
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_alerts_vehicle_type_dueDate' AND object_id = OBJECT_ID('dbo.alerts'))
+  CREATE UNIQUE INDEX UX_alerts_vehicle_type_dueDate ON dbo.alerts(vehicleId, alertType, dueDate) WHERE dueDate IS NOT NULL;
+GO
+-- 2) One alert per day per vehicle+type when dueDate IS NULL (prevents regenerate duplicates)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_alerts_vehicle_type_createdDate_nullDue' AND object_id = OBJECT_ID('dbo.alerts'))
+  CREATE UNIQUE INDEX UX_alerts_vehicle_type_createdDate_nullDue ON dbo.alerts(vehicleId, alertType, createdDate) WHERE dueDate IS NULL;
+GO
+
+/* 10) Audit events */
 IF OBJECT_ID('dbo.audit_events', 'U') IS NULL
 BEGIN
   CREATE TABLE dbo.audit_events (
@@ -276,4 +332,86 @@ GO
 
 /* End */
 PRINT 'FleetFox schema ensured.';
+GO
+
+/* 11) Stored procedure: Recalculate fueling efficiencies (km/gal)
+   Recomputes fuelEfficiencyKmPerGallon for a given vehicle starting at a date, cascading forward.
+   If @vehicleId is NULL or empty, processes ALL vehicles.
+   Uses previous mileage and the CURRENT row's liters to compute: (km diff) / (liters / 3.78541)
+*/
+GO
+CREATE OR ALTER PROCEDURE dbo.RecalcFuelEfficiencies
+  @vehicleId NVARCHAR(50) = NULL,
+  @fromDate DATE = NULL
+AS
+BEGIN
+  SET NOCOUNT ON;
+
+  -- If no vehicle provided, loop through all vehicles present in fueling_logs
+  IF @vehicleId IS NULL OR LTRIM(RTRIM(@vehicleId)) = ''
+  BEGIN
+    DECLARE cur_all CURSOR FAST_FORWARD FOR
+      SELECT DISTINCT vehicleId FROM dbo.fueling_logs;
+    DECLARE @vId NVARCHAR(50);
+    OPEN cur_all;
+    FETCH NEXT FROM cur_all INTO @vId;
+    WHILE @@FETCH_STATUS = 0
+    BEGIN
+      EXEC dbo.RecalcFuelEfficiencies @vehicleId = @vId, @fromDate = @fromDate;
+      FETCH NEXT FROM cur_all INTO @vId;
+    END
+    CLOSE cur_all; DEALLOCATE cur_all;
+    RETURN;
+  END
+
+  -- Determine starting date
+  DECLARE @startDate DATE;
+  IF @fromDate IS NOT NULL SET @startDate = @fromDate; 
+  ELSE SELECT @startDate = MIN(fuelingDate) FROM dbo.fueling_logs WHERE vehicleId = @vehicleId;
+
+  IF @startDate IS NULL RETURN; -- no logs to process
+
+  -- Base mileage: last record BEFORE start date
+  DECLARE @prevMileage INT = NULL;
+  SELECT TOP 1 @prevMileage = mileageAtFueling
+  FROM dbo.fueling_logs
+  WHERE vehicleId = @vehicleId AND fuelingDate < @startDate
+  ORDER BY fuelingDate DESC, createdAt DESC, id DESC;
+
+  -- Iterate forward in stable order
+  DECLARE recalc_cur CURSOR FAST_FORWARD FOR
+    SELECT id, mileageAtFueling, quantityLiters
+    FROM dbo.fueling_logs
+    WHERE vehicleId = @vehicleId AND fuelingDate >= @startDate
+    ORDER BY fuelingDate ASC, createdAt ASC, id ASC;
+
+  DECLARE @id INT, @mileage INT, @liters DECIMAL(10,2);
+  DECLARE @diff INT, @gallons DECIMAL(18,6), @eff DECIMAL(10,1);
+
+  OPEN recalc_cur;
+  FETCH NEXT FROM recalc_cur INTO @id, @mileage, @liters;
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    SET @eff = NULL;
+    IF @prevMileage IS NOT NULL
+    BEGIN
+      SET @diff = @mileage - @prevMileage;
+      IF @liters IS NOT NULL AND @liters > 0 AND @diff > 0
+      BEGIN
+        SET @gallons = CAST(@liters / 3.78541 AS DECIMAL(18,6));
+        IF @gallons > 0
+          SET @eff = CAST(ROUND(@diff / @gallons, 1) AS DECIMAL(10,1));
+      END
+    END
+
+    UPDATE dbo.fueling_logs SET fuelEfficiencyKmPerGallon = @eff WHERE id = @id;
+
+    -- advance base mileage
+    SET @prevMileage = @mileage;
+
+    FETCH NEXT FROM recalc_cur INTO @id, @mileage, @liters;
+  END
+
+  CLOSE recalc_cur; DEALLOCATE recalc_cur;
+END
 GO

@@ -550,7 +550,7 @@ export async function getMaintenanceLogs(): Promise<MaintenanceLog[]> {
       `);
       return result.recordset.map(row => ({
         id: row.id.toString(),
-        vehicleId: row.vehicleId,
+        vehicleId: row.vehicleId != null ? row.vehicleId.toString() : "",
         vehiclePlateNumber: row.vehiclePlateNumber,
         maintenanceType: row.maintenanceType,
         executionDate: new Date(row.executionDate).toISOString().split('T')[0],
@@ -630,7 +630,7 @@ export async function getMaintenanceLogsFiltered({ vehicleId, from, to }: { vehi
       const result = await request.query(query);
       return result.recordset.map(row => ({
         id: row.id.toString(),
-        vehicleId: row.vehicleId,
+        vehicleId: row.vehicleId != null ? row.vehicleId.toString() : "",
         vehiclePlateNumber: row.vehiclePlateNumber,
         maintenanceType: row.maintenanceType,
         executionDate: new Date(row.executionDate).toISOString().split('T')[0],
@@ -731,7 +731,7 @@ export async function getMaintenanceLogById(id: string): Promise<MaintenanceLog 
       
       return {
         id: rowLog.id.toString(),
-        vehicleId: rowLog.vehicleId,
+        vehicleId: rowLog.vehicleId != null ? rowLog.vehicleId.toString() : "",
         vehiclePlateNumber: rowLog.vehiclePlateNumber,
         maintenanceType: rowLog.maintenanceType,
         executionDate: new Date(rowLog.executionDate).toISOString().split('T')[0],
@@ -800,7 +800,7 @@ export async function getMaintenanceLogsByVehicleId(vehicleId: string): Promise<
         `);
         return result.recordset.map(row => ({
           id: row.id.toString(),
-          vehicleId: row.vehicleId,
+          vehicleId: row.vehicleId != null ? row.vehicleId.toString() : "",
           vehiclePlateNumber: row.vehiclePlateNumber,
           maintenanceType: row.maintenanceType,
           executionDate: new Date(row.executionDate).toISOString().split('T')[0],

@@ -186,7 +186,7 @@ export default function UpcomingMaintenanceReportPage() {
           ) : upcomingVehicles.length === 0 ? (
             <p className="text-muted-foreground">No hay vehículos con mantenimiento próximo o no hay datos disponibles. Verifique la implementación de la base de datos.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>

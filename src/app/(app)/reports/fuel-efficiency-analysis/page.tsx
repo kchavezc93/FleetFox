@@ -26,6 +26,7 @@ import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts";
+import { formatNumber } from "@/lib/currency";
 
 export default function FuelEfficiencyAnalysisPage() {
   const [efficiencyData, setEfficiencyData] = useState<FuelEfficiencyStats[]>([]);
@@ -116,9 +117,9 @@ export default function FuelEfficiencyAnalysisPage() {
       ...efficiencyData.map(d => [
         d.plateNumber,
         d.brandModel,
-        d.averageEfficiency?.toFixed(1) ?? 'N/A',
-        d.minEfficiency?.toFixed(1) ?? 'N/A',
-        d.maxEfficiency?.toFixed(1) ?? 'N/A',
+        d.averageEfficiency != null ? formatNumber(d.averageEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A',
+        d.minEfficiency != null ? formatNumber(d.minEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A',
+        d.maxEfficiency != null ? formatNumber(d.maxEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A',
         d.logCount,
       ].join(','))
     ];
@@ -241,7 +242,7 @@ export default function FuelEfficiencyAnalysisPage() {
           ) : efficiencyData.length === 0 ? (
             <p className="text-muted-foreground">No hay datos de eficiencia de combustible disponibles o registros de combustible con cálculo de eficiencia. Verifique la implementación de la base de datos y los registros existentes.</p>
           ) : (
-            <Table className="text-base">
+            <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-semibold">Vehículo (Matrícula)</TableHead>
@@ -257,9 +258,9 @@ export default function FuelEfficiencyAnalysisPage() {
                   <TableRow key={data.vehicleId}>
                     <TableCell className="font-medium">{data.plateNumber}</TableCell>
                     <TableCell>{data.brandModel}</TableCell>
-                    <TableCell className="text-right">{data.averageEfficiency?.toFixed(1) ?? 'N/A'}</TableCell>
-                    <TableCell className="text-right">{data.minEfficiency?.toFixed(1) ?? 'N/A'}</TableCell>
-                    <TableCell className="text-right">{data.maxEfficiency?.toFixed(1) ?? 'N/A'}</TableCell>
+                    <TableCell className="text-right">{data.averageEfficiency != null ? formatNumber(data.averageEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}</TableCell>
+                    <TableCell className="text-right">{data.minEfficiency != null ? formatNumber(data.minEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}</TableCell>
+                    <TableCell className="text-right">{data.maxEfficiency != null ? formatNumber(data.maxEfficiency, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : 'N/A'}</TableCell>
                     <TableCell className="text-right">{data.logCount}</TableCell>
                   </TableRow>
                 ))}
@@ -290,7 +291,7 @@ export default function FuelEfficiencyAnalysisPage() {
                 <YAxis width={72} tickMargin={8} tickLine={false} axisLine={false} />
                 <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
                   const label = name === 'avgEfficiency' ? 'Promedio' : name === 'minEfficiency' ? 'Mínimo' : name === 'maxEfficiency' ? 'Máximo' : String(name);
-                  return `${label}: ${Number(value).toFixed(1)} km/gal`;
+                  return `${label}: ${formatNumber(Number(value), { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km/gal`;
                 }} />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Bar dataKey="avgEfficiency" fill="hsl(var(--chart-1))" radius={[6,6,0,0]} />

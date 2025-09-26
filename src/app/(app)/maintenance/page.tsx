@@ -16,6 +16,7 @@ import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
 import { requirePermission } from "@/lib/authz";
 import { format } from "date-fns";
 import { formatDateDDMMYYYY } from "@/lib/utils";
+import { formatNumber, formatCurrency } from "@/lib/currency";
 import { es } from "date-fns/locale";
 import {
   DropdownMenu,
@@ -77,13 +78,13 @@ export default async function MaintenancePage() {
             </div>
           </div>
         ) : (
-          <Table>
+          <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
             <TableHeader>
               <TableRow>
                 <TableHead>Vehículo</TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Millaje</TableHead>
+                <TableHead>Kilometraje</TableHead>
                 <TableHead>Costo (C$)</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -93,14 +94,16 @@ export default async function MaintenancePage() {
                 <TableRow key={log.id}>
                   <TableCell className="font-medium">{log.vehiclePlateNumber}</TableCell>
                   <TableCell>
-                    <Badge variant={log.maintenanceType === "Preventivo" ? "default" : "secondary"} 
-                           className={log.maintenanceType === "Preventivo" ? "bg-blue-500 text-white" : "bg-orange-500 text-white"}>
+                    <Badge
+                      variant="secondary"
+                      className={log.maintenanceType === "Preventivo" ? "bg-green-600 text-white" : "bg-red-600 text-white"}
+                    >
                       {log.maintenanceType}
                     </Badge>
                   </TableCell>
                   <TableCell>{formatDateDDMMYYYY(log.executionDate)}</TableCell>
-                  <TableCell>{log.mileageAtService.toLocaleString()} km</TableCell>
-                  <TableCell>C${log.cost.toFixed(2)}</TableCell>
+                  <TableCell>{formatNumber(log.mileageAtService)} km</TableCell>
+                  <TableCell>{formatCurrency(log.cost)}</TableCell>
                   <TableCell className="text-right">
                      <DropdownMenu>
                       <DropdownMenuTrigger asChild>

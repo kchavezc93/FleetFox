@@ -13,6 +13,7 @@ export default async function MobileFuelingEditPage({ params }: { params: Promis
   ]);
   if (!log) notFound();
   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+  const displayVehicles = vehicles.filter(v => (v.status === 'Activo' || v.status === 'En Taller') || v.id === log!.vehicleId);
 
   async function submit(data: any) {
     "use server";
@@ -22,10 +23,11 @@ export default async function MobileFuelingEditPage({ params }: { params: Promis
   return (
     <div className="max-w-md mx-auto p-4">
       <FuelingForm
-        vehicles={activeVehicles}
+        vehicles={displayVehicles}
         onSubmitAction={submit as any}
   redirectPath={`/fueling/mobile/${id}`}
         initial={{
+          id,
           vehicleId: log!.vehicleId,
           fuelingDate: new Date(log!.fuelingDate + 'T00:00:00'),
           mileageAtFueling: log!.mileageAtFueling,

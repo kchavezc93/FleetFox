@@ -33,6 +33,7 @@ export default function SettingsPage() {
         icon={SettingsIcon}
       />
       <div className="grid gap-6">
+        <RecalcEfficienciesCard />
         <VoucherLimitCard />
         <AlertThresholdsCard />
         <Card>
@@ -72,10 +73,135 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card as CardBase } from "@/components/ui/card";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 // Client components should call an API route instead of server actions directly
 // Server actions remain the single source of truth behind the API
 // import { loadAlertThresholdsAction, saveAlertThresholdsAction } from "@/lib/actions/settings-actions";
 import { useToast } from "@/hooks/use-toast";
+import { format } from "date-fns";
+
+function RecalcEfficienciesCard() {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [vehicles, setVehicles] = useState<{ id: string; plateNumber: string; brand?: string; model?: string }[]>([]);
+  const [vehicleId, setVehicleId] = useState<string | 'ALL'>('ALL');
+  const [fromDate, setFromDate] = useState<string>("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [running, setRunning] = useState(false);
+  const { toast } = useToast();
+
+  useEffect(() => { (async () => {
+    try {
+      const me = await fetch('/api/auth/me', { cache: 'no-store' });
+      const mj = me.ok ? await me.json() : null;
+      setIsAdmin(mj?.role === 'Admin');
+    } catch {}
+    try {
+      const res = await fetch('/api/vehicles/list', { cache: 'no-store' });
+      const rows = res.ok ? await res.json() : [];
+      setVehicles(Array.isArray(rows) ? rows : []);
+    } catch {}
+  })(); }, []);
+
+  async function run() {
+    if (!isAdmin) return;
+    setRunning(true);
+    try {
+      const payload: any = {};
+      if (vehicleId && vehicleId !== 'ALL') payload.vehicleId = vehicleId;
+      if (fromDate) payload.fromDate = fromDate;
+      const res = await fetch('/api/settings/recalc-efficiencies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        toast({ title: 'Recalculo ejecutado', description: 'Las eficiencias serán actualizadas.' });
+      } else {
+        const j = await res.json().catch(() => null);
+        toast({ title: 'No se pudo ejecutar', description: j?.error || 'Error inesperado.', variant: 'destructive' });
+      }
+    } catch (e) {
+      toast({ title: 'No se pudo ejecutar', description: 'Revisa la conexión con la BD.', variant: 'destructive' });
+    }
+    setRunning(false);
+  }
+
+  const handleExecuteClick = async () => {
+    if (!isAdmin) return;
+    if (vehicleId === 'ALL') {
+      setConfirmOpen(true);
+    } else {
+      await run();
+    }
+  };
+
+  const confirmAction = async () => {
+    setConfirmOpen(false);
+    await run();
+  };
+
+  if (!isAdmin) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Database className="h-5 w-5"/> Recalcular eficiencias de combustible</CardTitle>
+        <CardDescription>Ejecuta el SP dbo.RecalcFuelEfficiencies para recomputar km/gal. Requiere rol Admin.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 md:grid-cols-4">
+        <div className="md:col-span-2">
+          <label className="block text-sm mb-1">Vehículo</label>
+          <Select value={vehicleId} onValueChange={(v) => setVehicleId(v as any)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecciona un vehículo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">Todos</SelectItem>
+              {vehicles.map(v => (
+                <SelectItem key={v.id} value={v.id}>{v.plateNumber} {v.brand ? `(${v.brand} ${v.model})` : ''}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <label className="block text-sm mb-1">Desde fecha (opcional)</label>
+          <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} />
+        </div>
+        <div className="flex items-end justify-end">
+          <Button onClick={handleExecuteClick} disabled={running}>{running ? 'Ejecutando...' : 'Ejecutar'}</Button>
+        </div>
+      </CardContent>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Recalcular eficiencias</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a recalcular las eficiencias de combustible para TODOS los vehículos.
+              Esta operación puede tardar varios minutos y afectará múltiples registros. ¿Deseas continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <button type="button">Cancelar</button>
+            </AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <button type="button" onClick={confirmAction}>Confirmar</button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}
 
 function VoucherLimitCard() {
   const [loading, setLoading] = useState(true);
