@@ -22,7 +22,7 @@ export function FuelingExportButtons({ rows }: { rows: FuelingRow[] }) {
     const headers = [
       "Vehículo (Matrícula)",
       "Fecha",
-      "Millaje",
+  "Kilometraje",
       "Galones",
       "Costo/Galón (C$)",
       "Costo Total (C$)",
@@ -72,7 +72,7 @@ export function FuelingExportButtons({ rows }: { rows: FuelingRow[] }) {
       columns: [
         { key: "plate", header: "Vehículo (Matrícula)", width: 18 },
         { key: "date", header: "Fecha", format: "date" },
-        { key: "mileage", header: "Millaje", format: "integer" },
+  { key: "mileage", header: "Kilometraje", format: "integer" },
         { key: "gallons", header: "Galones", format: "decimal" },
         { key: "cpg", header: "Costo/Galón (C$)", format: "currency", numFmt: "[$C$ ]#,##0.00" },
         { key: "total", header: "Costo Total (C$)", format: "currency", numFmt: "[$C$ ]#,##0.00" },

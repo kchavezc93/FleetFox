@@ -101,7 +101,7 @@ export default async function VehiclesPage() {
                 <TableHead>Matrícula</TableHead>
                 <TableHead>Marca y Modelo</TableHead>
                 <TableHead>Año</TableHead>
-                <TableHead>Millaje</TableHead>
+                <TableHead>Kilometraje</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="w-[140px]">Activo</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>

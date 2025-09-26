@@ -143,17 +143,17 @@ export async function createFuelingLog(formData: FuelingFormData) {
       const prevLogRequest = transaction.request(); 
       prevLogRequest.input('prev_vehicleId_eff', sql.NVarChar(50), vehicleIdNorm);
   prevLogRequest.input('prev_fuelingDate_eff', sql.Date, fuelingDateUtc); 
-      const prevLogResult = await prevLogRequest.query(`
-          SELECT TOP 1 mileageAtFueling, quantityLiters 
-          FROM fueling_logs 
-          WHERE vehicleId = @prev_vehicleId_eff AND fuelingDate < @prev_fuelingDate_eff 
-          ORDER BY fuelingDate DESC, createdAt DESC
-      `);
+    const prevLogResult = await prevLogRequest.query(`
+      SELECT TOP 1 mileageAtFueling, quantityLiters 
+      FROM fueling_logs 
+      WHERE vehicleId = @prev_vehicleId_eff AND fuelingDate <= @prev_fuelingDate_eff 
+      ORDER BY fuelingDate DESC, createdAt DESC, id DESC
+    `);
 
       if (prevLogResult.recordset.length > 0) {
           const prevLog = prevLogResult.recordset[0];
           // Validación: el kilometraje nuevo no puede ser menor que el último previo a la fecha
-          if (data.mileageAtFueling < prevLog.mileageAtFueling) {
+          if (data.mileageAtFueling <= prevLog.mileageAtFueling) {
             await transaction.rollback();
             return {
               message: `El kilometraje (${data.mileageAtFueling}) no puede ser menor que el último registro previo (${prevLog.mileageAtFueling}).`,
@@ -166,6 +166,28 @@ export async function createFuelingLog(formData: FuelingFormData) {
           if (gallonsUsedCurrent > 0 && mileageDifference > 0) {
               fuelEfficiencyKmPerGallon = parseFloat((mileageDifference / gallonsUsedCurrent).toFixed(1));
           }
+      }
+
+      // Validación contra el siguiente registro (si existe): debe ser estrictamente menor al siguiente
+      const nextLogRequest = transaction.request();
+      nextLogRequest.input('next_vehicleId_eff', sql.NVarChar(50), vehicleIdNorm);
+      nextLogRequest.input('next_fuelingDate_eff', sql.Date, fuelingDateUtc);
+      const nextLogResult = await nextLogRequest.query(`
+          SELECT TOP 1 mileageAtFueling
+          FROM fueling_logs
+          WHERE vehicleId = @next_vehicleId_eff AND fuelingDate > @next_fuelingDate_eff
+          ORDER BY fuelingDate ASC, createdAt ASC, id ASC
+      `);
+      if (nextLogResult.recordset.length > 0) {
+        const nextLog = nextLogResult.recordset[0];
+        if (data.mileageAtFueling >= nextLog.mileageAtFueling) {
+          await transaction.rollback();
+          return {
+            message: `El kilometraje (${data.mileageAtFueling}) debe ser menor que el registro siguiente (${nextLog.mileageAtFueling}).`,
+            errors: { mileageAtFueling: 'El kilometraje debe ser menor que el siguiente registro existente.' },
+            success: false,
+          };
+        }
       }
       
       const logRequest = transaction.request(); 
@@ -584,13 +606,13 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     const prevLogResult = await prevLogRequest.query(`
       SELECT TOP 1 mileageAtFueling, quantityLiters
       FROM fueling_logs
-      WHERE vehicleId = @prev_vehicleId_eff AND fuelingDate < @prev_fuelingDate_eff AND id <> @currentId
-      ORDER BY fuelingDate DESC, createdAt DESC
+      WHERE vehicleId = @prev_vehicleId_eff AND fuelingDate <= @prev_fuelingDate_eff AND id <> @currentId
+      ORDER BY fuelingDate DESC, createdAt DESC, id DESC
     `);
     if (prevLogResult.recordset.length > 0) {
       const prevLog = prevLogResult.recordset[0];
-      // Validación: el kilometraje nuevo no puede ser menor que el último previo a la fecha
-      if (data.mileageAtFueling < prevLog.mileageAtFueling) {
+      // Validación: el kilometraje nuevo no puede ser menor o igual al último previo a la fecha
+      if (data.mileageAtFueling <= prevLog.mileageAtFueling) {
         await transaction.rollback();
         return {
           message: `El kilometraje (${data.mileageAtFueling}) no puede ser menor que el último registro previo (${prevLog.mileageAtFueling}).`,
@@ -602,6 +624,29 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
       const gallonsUsedCurrent = data.quantityLiters / LITERS_PER_GALLON;
       if (gallonsUsedCurrent > 0 && mileageDifference > 0) {
         fuelEfficiencyKmPerGallon = parseFloat((mileageDifference / gallonsUsedCurrent).toFixed(1));
+      }
+    }
+
+    // Validación contra el siguiente registro existente
+    const nextLogReq = transaction.request();
+    nextLogReq.input('n_vehicleId', sql.NVarChar(50), String(data.vehicleId).trim());
+    nextLogReq.input('n_date', sql.Date, fuelingDateUtc);
+    nextLogReq.input('currentId2', sql.NVarChar(50), id);
+    const nextLogRes = await nextLogReq.query(`
+      SELECT TOP 1 mileageAtFueling
+      FROM fueling_logs
+      WHERE vehicleId = @n_vehicleId AND fuelingDate > @n_date AND id <> @currentId2
+      ORDER BY fuelingDate ASC, createdAt ASC, id ASC
+    `);
+    if (nextLogRes.recordset.length > 0) {
+      const nextLog = nextLogRes.recordset[0];
+      if (data.mileageAtFueling >= nextLog.mileageAtFueling) {
+        await transaction.rollback();
+        return {
+          message: `El kilometraje (${data.mileageAtFueling}) debe ser menor que el registro siguiente (${nextLog.mileageAtFueling}).`,
+          errors: { mileageAtFueling: 'El kilometraje debe ser menor que el siguiente registro existente.' },
+          success: false,
+        };
       }
     }
 
@@ -741,6 +786,7 @@ export async function updateFuelingLog(id: string, formData: FuelingFormData) {
     revalidatePath('/fueling');
     // Revalidate detail view and mobile route to reflect latest vouchers
     revalidatePath(`/fueling/${id}`);
+  revalidatePath(`/fueling/mobile/${id}`);
     revalidatePath('/fueling/mobile');
     revalidatePath('/reports/fuel-consumption');
     revalidatePath(`/vehicles/${data.vehicleId}`);

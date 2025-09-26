@@ -251,6 +251,11 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
                     ))}
                   </SelectContent>
                 </Select>
+                {Boolean(initial?.id) && (
+                  <FormDescription>
+                    No editable en edición. Si necesitas cambiar el vehículo, elimina este registro y crea uno nuevo.
+                  </FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}

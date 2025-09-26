@@ -98,7 +98,7 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
               <TableRow>
                 <TableHead>Vehículo</TableHead>
                 <TableHead>Fecha</TableHead>
-                <TableHead>Millaje</TableHead>
+                <TableHead>Kilometraje</TableHead>
                 <TableHead>Galones</TableHead>
                 <TableHead>Costo/Galón (C$)</TableHead>
                 <TableHead>Costo Total (C$)</TableHead>

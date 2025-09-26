@@ -2,6 +2,7 @@ import { requirePermission } from "@/lib/authz";
 import { getFuelingLogsFiltered } from "@/lib/actions/fueling-actions";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 
 function toYMD(d: Date) {
 	const y = d.getFullYear();
@@ -30,15 +31,15 @@ export default async function MobileFuelingHomePage() {
 			{logs.length === 0 ? (
 				<p className="text-sm text-muted-foreground">No hay registros en los últimos 7 días.</p>
 			) : (
-				<ul className="space-y-2">
+							<ul className="space-y-2">
 					{logs.map((l) => (
-						<li key={l.id} className="border rounded bg-card">
-						  <Link href={`/fueling/mobile/${l.id}`} className="block p-3">
+									<li key={l.id} className="border rounded bg-card shadow-sm">
+										<Link href={`/fueling/mobile/${l.id}`} className="block p-3 sm:p-4">
 							<div className="text-sm font-medium">{l.vehiclePlateNumber || l.vehicleId}</div>
 							<div className="text-xs text-muted-foreground">{l.fuelingDate}</div>
 							<div className="mt-1 text-sm flex justify-between">
-								<span>{l.quantityLiters.toFixed(2)} L</span>
-								<span>C${l.totalCost.toFixed(2)}</span>
+													<span>{formatNumber(l.quantityLiters, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L</span>
+													<span>{formatCurrency(l.totalCost)}</span>
 							</div>
 							<div className="mt-1 text-xs text-muted-foreground truncate">{l.station}</div>
 						  </Link>

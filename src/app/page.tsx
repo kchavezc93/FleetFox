@@ -53,7 +53,7 @@ export default function LandingPage() {
             </CardHeader>
             <CardContent>
               <CardDescription>
-                Mantenga registros detallados de todos sus vehículos, desde números de matrícula hasta el millaje y estado actual.
+                Mantenga registros detallados de todos sus vehículos, desde números de matrícula hasta el kilometraje y estado actual.
               </CardDescription>
             </CardContent>
           </Card>

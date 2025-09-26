@@ -3,6 +3,8 @@ import { getFuelingLogById, updateFuelingLog } from "@/lib/actions/fueling-actio
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { FuelingForm } from "@/components/fueling-form";
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default async function MobileFuelingEditPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -21,7 +23,10 @@ export default async function MobileFuelingEditPage({ params }: { params: Promis
   }
 
   return (
-    <div className="max-w-md mx-auto p-4">
+    <div className="max-w-md mx-auto p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <Link href="/fueling/mobile"><Button variant="secondary" size="sm">Volver</Button></Link>
+      </div>
       <FuelingForm
         vehicles={displayVehicles}
         onSubmitAction={submit as any}

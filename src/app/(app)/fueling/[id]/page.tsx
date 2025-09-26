@@ -58,7 +58,7 @@ export default async function FuelingDetailsPage({ params }: { params: Promise<{
             <div className="font-medium">{formatDateDDMMYYYY(log.fuelingDate)}</div>
           </div>
           <div>
-            <div className="text-sm text-muted-foreground">Millaje</div>
+            <div className="text-sm text-muted-foreground">Kilometraje</div>
             <div className="font-medium">{log.mileageAtFueling.toLocaleString()} km</div>
           </div>
           <div>

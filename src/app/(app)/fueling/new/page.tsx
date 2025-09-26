@@ -17,7 +17,7 @@ export default async function NewFuelingPage() {
     <>
       <PageHeader
         title="Registrar Nueva Carga de Combustible"
-        description="Registra una compra de combustible y actualiza el millaje del vehículo."
+  description="Registra una compra de combustible y actualiza el kilometraje del vehículo."
         icon={Fuel}
         actions={
           <Link href="/fueling">
