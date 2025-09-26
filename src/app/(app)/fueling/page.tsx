@@ -19,6 +19,7 @@ import { FuelingExportButtons } from "@/components/fueling-export";
 import FuelingFilters from "@/components/fueling-filters";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { exportToXLSX } from "@/lib/export-excel";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 import { cookies } from "next/headers";
 import {
   DropdownMenu,
@@ -32,10 +33,11 @@ import { ConfirmSubmitMenuItem } from "@/components/confirm-submit-menu-item";
 
 const LITERS_PER_GALLON = 3.78541;
 
-export default async function FuelingPage({ searchParams }: { searchParams?: Promise<{ vehicleId?: string; from?: string; to?: string }> }) {
+export default async function FuelingPage({ searchParams }: { searchParams?: Promise<{ vehicleIds?: string; vehicleId?: string; from?: string; to?: string }> }) {
   await requirePermission('/fueling');
   const sp = searchParams ? await searchParams : {};
-  const vehicleId = sp?.vehicleId;
+  const vehicleIdsCsv = sp?.vehicleIds;
+  const vehicleId = sp?.vehicleId; // legacy single-select support
   const from = sp?.from;
   const to = sp?.to;
 
@@ -46,8 +48,9 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
   const effFrom = from ?? (to ? undefined : defaultFrom);
   const effTo = to ?? (from ? undefined : defaultTo);
 
+  const selectedIds = (vehicleIdsCsv ? vehicleIdsCsv.split(',').map(s => s.trim()).filter(Boolean) : (vehicleId ? [vehicleId] : []));
   const [logs, vehicles] = await Promise.all([
-    getFuelingLogsFiltered({ vehicleId, from: effFrom, to: effTo }),
+    getFuelingLogsFiltered({ vehicleId, vehicleIds: selectedIds, from: effFrom, to: effTo }),
     getVehicles(),
   ]);
   const vehicleMap = new Map(vehicles.map(v => [v.id, `${v.plateNumber} (${v.brand} ${v.model})`]));
@@ -60,7 +63,12 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
         icon={Fuel}
         actions={
           <div className="flex items-center gap-2">
-            <FuelingFilters vehicles={vehicles} selectedVehicleId={vehicleId} from={effFrom} to={effTo} />
+            <FuelingFilters
+              vehicles={vehicles}
+              selectedVehicleIds={selectedIds}
+              from={effFrom}
+              to={effTo}
+            />
             <FuelingExportButtons
               rows={logs.map(l => ({
                 plate: l.vehiclePlateNumber || vehicleMap.get(l.vehicleId) || l.vehicleId,
@@ -119,11 +127,11 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
                 <TableRow key={log.id}>
                   <TableCell className="font-medium">{log.vehiclePlateNumber}</TableCell>
                   <TableCell>{formatDateDDMMYYYY(log.fuelingDate)}</TableCell>
-                  <TableCell>{log.mileageAtFueling.toLocaleString()} km</TableCell>
-                  <TableCell>{(log.quantityLiters / LITERS_PER_GALLON).toFixed(2)}</TableCell>
-                  <TableCell>C${(log.costPerLiter * LITERS_PER_GALLON).toFixed(2)}</TableCell>
-                  <TableCell>C${log.totalCost.toFixed(2)}</TableCell>
-                  <TableCell>{log.fuelEfficiencyKmPerGallon ? log.fuelEfficiencyKmPerGallon.toFixed(1) : "N/A"}</TableCell>
+                  <TableCell>{formatNumber(log.mileageAtFueling)} km</TableCell>
+                  <TableCell>{formatNumber(log.quantityLiters / LITERS_PER_GALLON, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell>{formatCurrency(log.costPerLiter * LITERS_PER_GALLON)}</TableCell>
+                  <TableCell>{formatCurrency(log.totalCost)}</TableCell>
+                  <TableCell>{log.fuelEfficiencyKmPerGallon != null ? `${formatNumber(log.fuelEfficiencyKmPerGallon, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : "N/A"}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

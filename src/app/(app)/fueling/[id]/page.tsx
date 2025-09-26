@@ -7,6 +7,7 @@ import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { getFuelingLogById, deleteFuelingLog } from "@/lib/actions/fueling-actions";
 import { requirePermission } from "@/lib/authz";
 import { formatDateDDMMYYYY } from "@/lib/utils";
+import { formatCurrency, formatNumber } from "@/lib/currency";
 import { VoucherGallery } from "@/components/voucher-gallery";
 
 const LITERS_PER_GALLON = 3.78541;
@@ -64,23 +65,23 @@ export default async function FuelingDetailsPage({ params }: { params: Promise<{
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Kilometraje</div>
-            <div className="font-medium">{log.mileageAtFueling.toLocaleString()} km</div>
+            <div className="font-medium">{formatNumber(log.mileageAtFueling)} km</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Galones</div>
-            <div className="font-medium">{(log.quantityLiters / LITERS_PER_GALLON).toFixed(2)}</div>
+            <div className="font-medium">{formatNumber(log.quantityLiters / LITERS_PER_GALLON, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Costo/Galón</div>
-            <div className="font-medium">C${(log.costPerLiter * LITERS_PER_GALLON).toFixed(2)}</div>
+            <div className="font-medium">{formatCurrency(log.costPerLiter * LITERS_PER_GALLON)}</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Costo Total</div>
-            <div className="font-medium">C${log.totalCost.toFixed(2)}</div>
+            <div className="font-medium">{formatCurrency(log.totalCost)}</div>
           </div>
           <div>
             <div className="text-sm text-muted-foreground">Eficiencia</div>
-            <div className="font-medium">{log.fuelEfficiencyKmPerGallon != null ? `${log.fuelEfficiencyKmPerGallon.toFixed(1)} km/gal` : 'N/A'}</div>
+            <div className="font-medium">{log.fuelEfficiencyKmPerGallon != null ? `${formatNumber(log.fuelEfficiencyKmPerGallon, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km/gal` : 'N/A'}</div>
           </div>
           <div className="md:col-span-2">
             <div className="text-sm text-muted-foreground">Estación</div>

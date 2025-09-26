@@ -55,6 +55,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [source, setSource] = useState<string | null>(null);
+  const [, forceRerender] = useState(0);
   
   // Local state to manage the list of attachments displayed in the UI
   const [currentAttachments, setCurrentAttachments] = useState<DisplayableAttachment[]>([]);
@@ -91,40 +92,8 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
 
   useEffect(() => {
     setIsClient(true);
-    if (typeof window !== 'undefined') {
-      const sp = new URLSearchParams(window.location.search);
-      const src = sp.get('source');
-      if (src === 'upcoming') {
-        setSource('upcoming');
-        toast({ title: 'Datos prellenados', description: 'Origen: Próximo Mantenimiento. Verifique y complete los detalles.' });
-      }
-      // Prefill from query params if provided
-      const qpVehicleId = sp.get('vehicleId') || undefined;
-      const qpExecutionDate = sp.get('executionDate') || undefined;
-      const qpMileage = sp.get('mileageAtService');
-      const qpNextDate = sp.get('nextDate') || undefined;
-      const qpNextMileage = sp.get('nextMileage');
-      if (!maintenanceLog) {
-        if (qpVehicleId) form.setValue('vehicleId', qpVehicleId, { shouldDirty: true });
-        form.setValue('maintenanceType', 'Preventivo', { shouldDirty: true });
-        if (qpExecutionDate) {
-          const d = new Date(qpExecutionDate + 'T00:00:00');
-          if (!isNaN(d.getTime())) form.setValue('executionDate', d, { shouldDirty: true });
-        }
-        if (qpMileage) {
-          const n = parseInt(qpMileage, 10);
-          if (!isNaN(n)) form.setValue('mileageAtService', n, { shouldDirty: true });
-        }
-        if (qpNextDate) {
-          const d2 = new Date(qpNextDate + 'T00:00:00');
-          if (!isNaN(d2.getTime())) form.setValue('nextMaintenanceDateScheduled', d2, { shouldDirty: true });
-        }
-        if (qpNextMileage) {
-          const n2 = parseInt(qpNextMileage, 10);
-          if (!isNaN(n2)) form.setValue('nextMaintenanceMileageScheduled', n2, { shouldDirty: true });
-        }
-      }
-    }
+
+    // If editing an existing maintenance log
     if (maintenanceLog) {
       form.reset({
         vehicleId: maintenanceLog.vehicleId,
@@ -136,28 +105,89 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
         provider: maintenanceLog.provider || "",
         nextMaintenanceDateScheduled: new Date(maintenanceLog.nextMaintenanceDateScheduled + "T00:00:00"),
         nextMaintenanceMileageScheduled: maintenanceLog.nextMaintenanceMileageScheduled || 0,
-        newAttachments: [], // Reset new attachments when log changes
-        attachmentsToRemove: [], // Reset removals
-      });
-      // Populate currentAttachments from existing log
-      setCurrentAttachments(maintenanceLog.attachments?.map(att => ({...att, isNew: false})) || []);
-    } else {
-      form.reset({ // Default values for new log
-        vehicleId: "",
-        maintenanceType: "Preventivo",
-        executionDate: new Date(),
-        mileageAtService: 0,
-        activitiesPerformed: "",
-        cost: 0,
-        provider: "",
-        nextMaintenanceDateScheduled: new Date(),
-        nextMaintenanceMileageScheduled: 0,
         newAttachments: [],
         attachmentsToRemove: [],
       });
-      setCurrentAttachments([]);
+      setCurrentAttachments(maintenanceLog.attachments?.map(att => ({ ...att, isNew: false })) || []);
+      return;
     }
-  }, [maintenanceLog, form, setIsClient]);
+
+    // New log: start with defaults
+    let initialValues: MaintenanceLogSchema = {
+      vehicleId: "",
+      maintenanceType: "Preventivo",
+      executionDate: new Date(),
+      mileageAtService: 0,
+      activitiesPerformed: "",
+      cost: 0,
+      provider: "",
+      nextMaintenanceDateScheduled: new Date(),
+      nextMaintenanceMileageScheduled: 0,
+      newAttachments: [],
+      attachmentsToRemove: [],
+    };
+
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const src = sp.get('source');
+      if (src === 'upcoming') {
+        setSource('upcoming');
+        toast({ title: 'Datos prellenados', description: 'Origen: Próximo Mantenimiento. Verifique y complete los detalles.' });
+      }
+      // Override defaults with query params when present
+      const qpVehicleId = sp.get('vehicleId') || undefined;
+      const qpExecutionDate = sp.get('executionDate') || undefined;
+      const qpMileage = sp.get('mileageAtService');
+      const qpNextDate = sp.get('nextDate') || undefined;
+      const qpNextMileage = sp.get('nextMileage');
+
+      if (qpVehicleId) initialValues.vehicleId = qpVehicleId;
+      // Force Preventivo when coming from upcoming
+      if (src === 'upcoming') initialValues.maintenanceType = 'Preventivo';
+      if (qpExecutionDate) {
+        const d = new Date(qpExecutionDate + 'T00:00:00');
+        if (!isNaN(d.getTime())) initialValues.executionDate = d;
+      }
+      if (qpMileage) {
+        const n = parseInt(qpMileage, 10);
+        if (!isNaN(n)) initialValues.mileageAtService = n;
+      }
+      if (qpNextDate) {
+        const d2 = new Date(qpNextDate + 'T00:00:00');
+        if (!isNaN(d2.getTime())) initialValues.nextMaintenanceDateScheduled = d2;
+      }
+      if (qpNextMileage) {
+        const n2 = parseInt(qpNextMileage, 10);
+        if (!isNaN(n2)) initialValues.nextMaintenanceMileageScheduled = n2;
+      }
+    }
+
+  form.reset(initialValues);
+  // force a rerender so headless Select picks updated values reliably on first paint
+  forceRerender((x) => x + 1);
+    setCurrentAttachments([]);
+  }, [maintenanceLog, form, toast]);
+
+  // Fallback: if coming from Upcoming and vehicleId is still empty after first render, try to set it from URL (by id or plate)
+  useEffect(() => {
+    if (maintenanceLog) return;
+    if (typeof window === 'undefined') return;
+    const currentVehicleId = form.getValues('vehicleId');
+    if (currentVehicleId) return;
+    const sp = new URLSearchParams(window.location.search);
+    const qpVehicleId = sp.get('vehicleId');
+    const qpPlate = sp.get('plate');
+    if (qpVehicleId) {
+      form.setValue('vehicleId', qpVehicleId, { shouldDirty: true });
+      return;
+    }
+    if (qpPlate) {
+      const match = vehicles.find(v => v.plateNumber === qpPlate);
+      if (match) {
+        form.setValue('vehicleId', match.id, { shouldDirty: true });
+      }
+    }
+  }, [maintenanceLog, form, vehicles]);
 
   // Lock maintenance type to Preventivo when source=upcoming
   useEffect(() => {
@@ -249,6 +279,14 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
         description: result.message,
       });
       if (result.log && !result.errors) {
+        const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+        const fromUpcoming = sp?.get('source') === 'upcoming';
+        if (fromUpcoming) {
+          // Volver al reporte con toast de éxito
+          router.push(`/reports/upcoming-maintenance?created=1`);
+          router.refresh();
+          return;
+        }
         router.push(`/maintenance/${result.log.id}`);
         router.refresh();
       } else if (result.errors) {
@@ -282,7 +320,12 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Vehículo *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value} disabled={!!maintenanceLog}>
+                <Select
+                  key={form.watch('vehicleId') || 'no-vehicle'}
+                  onValueChange={field.onChange}
+                  value={form.watch('vehicleId')}
+                  disabled={!!maintenanceLog || source === 'upcoming'}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccione un vehículo" />
@@ -290,12 +333,15 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
                   </FormControl>
                   <SelectContent>
                     {vehicles.map((vehicle) => (
-                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                      <SelectItem key={vehicle.id} value={String(vehicle.id)}>
                         {vehicle.plateNumber} ({vehicle.brand} {vehicle.model})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {source === 'upcoming' && (
+                  <FormDescription>Fijado por origen: Próximo Mantenimiento. No se puede cambiar el vehículo.</FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}

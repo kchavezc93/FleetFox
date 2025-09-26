@@ -6,12 +6,14 @@ import { createMaintenanceLog } from "@/lib/actions/maintenance-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { requirePermission } from "@/lib/authz";
 import { redirect } from "next/navigation";
-import type { PageProps } from "next";
+// Props compatible with Next 15 PageProps shape used by typegen
+type NextPageProps = { params?: Promise<any>; searchParams?: Promise<any> };
 
-export default async function NewMaintenancePage(_props: PageProps) {
+export default async function NewMaintenancePage(_props: NextPageProps) {
   await requirePermission('/maintenance');
   const vehicles = await getVehicles();
-  const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
+  // Include all vehicles so a prefilled vehicleId from query always exists in the options
+  const activeVehicles = vehicles;
 
   return (
     <>

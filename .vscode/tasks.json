@@ -385,6 +385,115 @@
 				"npm run typecheck"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Typecheck (post-fix)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			]
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (retry)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (retry 2)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (final)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"group": "build"
 		}
 	]
 }

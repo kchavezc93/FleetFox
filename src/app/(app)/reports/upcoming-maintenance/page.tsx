@@ -25,6 +25,7 @@ import { formatDateDDMMYYYY } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { VehicleMultiSelect } from "@/components/vehicles/vehicle-multi-select";
+import { useToast } from "@/hooks/use-toast";
 
 const DEFAULT_DAYS_THRESHOLD = 30; // Mantenimiento en los próximos X días
 const DEFAULT_MILEAGE_THRESHOLD = 2000; // Mantenimiento en los próximos X km
@@ -37,6 +38,7 @@ export default function UpcomingMaintenanceReportPage() {
 
   const [daysThreshold, setDaysThreshold] = useState<number>(DEFAULT_DAYS_THRESHOLD);
   const [kmThreshold, setKmThreshold] = useState<number>(DEFAULT_MILEAGE_THRESHOLD);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function loadReportData() {
@@ -65,6 +67,22 @@ export default function UpcomingMaintenanceReportPage() {
     }
     loadReportData();
   }, [daysThreshold, kmThreshold]);
+
+  // Detect redirect with created flag and show a standardized toast once, then clean the URL
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("created") === "1") {
+      toast({
+        title: "Mantenimiento creado",
+        description:
+          "Registro de mantenimiento creado y umbrales actualizados. Si el vehículo dejó de cumplir los umbrales, ya no aparecerá en la lista.",
+      });
+      sp.delete("created");
+      const newQuery = sp.toString();
+      const newUrl = `${window.location.pathname}${newQuery ? `?${newQuery}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, [toast]);
 
   const selectedSet = new Set(selectedVehicleIds);
   const filteredUpcoming = upcomingVehicles.filter(v =>
@@ -231,12 +249,21 @@ export default function UpcomingMaintenanceReportPage() {
                           href={{
                             pathname: "/maintenance/new",
                             query: {
-                              vehicleId: vehicle.vehicleId,
+                              vehicleId: String(vehicle.vehicleId),
                               type: "Preventivo",
-                              executionDate: vehicle.nextPreventiveMaintenanceDate ?? new Date().toISOString().slice(0, 10),
-                              mileageAtService: vehicle.currentMileage?.toString() ?? "0",
-                              nextDate: vehicle.nextPreventiveMaintenanceDate ?? "",
+                              executionDate: (typeof vehicle.nextPreventiveMaintenanceDate === 'string'
+                                ? vehicle.nextPreventiveMaintenanceDate
+                                : vehicle.nextPreventiveMaintenanceDate
+                                  ? new Date(vehicle.nextPreventiveMaintenanceDate).toISOString().slice(0, 10)
+                                  : new Date().toISOString().slice(0, 10)),
+                              mileageAtService: vehicle.currentMileage != null ? String(vehicle.currentMileage) : "0",
+                              nextDate: (typeof vehicle.nextPreventiveMaintenanceDate === 'string'
+                                ? vehicle.nextPreventiveMaintenanceDate
+                                : vehicle.nextPreventiveMaintenanceDate
+                                  ? new Date(vehicle.nextPreventiveMaintenanceDate).toISOString().slice(0, 10)
+                                  : ""),
                               nextMileage: vehicle.nextPreventiveMaintenanceMileage != null ? String(vehicle.nextPreventiveMaintenanceMileage) : "",
+                              plate: vehicle.plateNumber,
                               source: "upcoming",
                             },
                           }}

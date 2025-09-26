@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Removed single-select in favor of multi-select
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -12,18 +12,19 @@ import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } fro
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Vehicle } from "@/types";
+import { VehicleMultiSelect } from "@/components/vehicles/vehicle-multi-select";
 
 export type FuelingFiltersProps = {
   vehicles: Vehicle[];
-  selectedVehicleId?: string;
+  selectedVehicleIds?: string[];
   from?: string; // yyyy-MM-dd
   to?: string;   // yyyy-MM-dd
 };
 
-export default function FuelingFilters({ vehicles, selectedVehicleId, from, to }: FuelingFiltersProps) {
+export default function FuelingFilters({ vehicles, selectedVehicleIds, from, to }: FuelingFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [vehicleId, setVehicleId] = React.useState<string>(selectedVehicleId ?? "all");
+  const [selectedIds, setSelectedIds] = React.useState<string[]>(selectedVehicleIds ?? []);
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(() => {
     if (from || to) {
       const parseLocal = (s: string) => {
@@ -42,19 +43,21 @@ export default function FuelingFilters({ vehicles, selectedVehicleId, from, to }
   // On first mount, if no from/to were provided via props, reflect default range in URL
   React.useEffect(() => {
     if (!from && !to && dateRange?.from && dateRange?.to) {
-      pushWith(vehicleId, dateRange);
+      pushWith(selectedIds, dateRange);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pushWith = React.useCallback((vid: string, range?: DateRange) => {
+  const pushWith = React.useCallback((ids: string[], range?: DateRange) => {
     const params = new URLSearchParams();
-    if (vid && vid !== "all") params.set("vehicleId", vid);
+    if (ids && ids.length > 0 && ids.length < vehicles.length) {
+      params.set("vehicleIds", ids.join(","));
+    }
     if (range?.from) params.set("from", format(range.from, "yyyy-MM-dd"));
     if (range?.to) params.set("to", format(range.to, "yyyy-MM-dd"));
     const qs = params.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
-  }, [pathname, router]);
+  }, [pathname, router, vehicles.length]);
 
   const applyPreset = (preset: string) => {
     const today = new Date();
@@ -72,35 +75,30 @@ export default function FuelingFilters({ vehicles, selectedVehicleId, from, to }
     }
     const newRange = { from: f, to: t } as DateRange;
     setDateRange(newRange);
-    pushWith(vehicleId, newRange);
+    pushWith(selectedIds, newRange);
   };
 
-  const handleVehicleChange = (val: string) => {
-    setVehicleId(val);
-    pushWith(val, dateRange);
+  const handleVehicleChange = (ids: string[]) => {
+    setSelectedIds(ids);
+    pushWith(ids, dateRange);
   };
 
   const handleRangeSelect = (range?: DateRange) => {
     setDateRange(range);
     if (range?.from && range?.to) {
-      pushWith(vehicleId, range);
+      pushWith(selectedIds, range);
     }
   };
 
   return (
     <div className="hidden md:flex items-center gap-2">
       <div className="min-w-[220px]">
-        <Select value={vehicleId} onValueChange={handleVehicleChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Todos los vehículos" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los vehículos</SelectItem>
-            {vehicles.map(v => (
-              <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <VehicleMultiSelect
+          vehicles={vehicles}
+          selectedIds={selectedIds}
+          onChange={handleVehicleChange}
+          buttonLabel="Vehículos"
+        />
       </div>
       <Popover>
         <PopoverTrigger asChild>

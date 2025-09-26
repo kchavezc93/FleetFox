@@ -863,8 +863,8 @@ export async function deleteFuelingLog(id: string) {
 }
 
 // Listar con filtros de vehículo y fecha
-export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?: string; to?: string }): Promise<FuelingLog[]> {
-  const { vehicleId, from, to } = params;
+export async function getFuelingLogsFiltered(params: { vehicleId?: string; vehicleIds?: string[]; from?: string; to?: string }): Promise<FuelingLog[]> {
+  const { vehicleId, vehicleIds, from, to } = params;
   const dbClient = await getDbClient();
   if (!dbClient || dbClient.type !== 'SQLServer' || !(dbClient as any).pool) {
     console.warn(`[Get Fueling Logs Filtered] DB no disponible o tipo no soportado.`);
@@ -873,7 +873,19 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
   const pool = (dbClient as any).pool as sql.ConnectionPool;
   try {
     const request = pool.request();
-    if (vehicleId) request.input('vId', sql.NVarChar(50), vehicleId);
+    const ids = (vehicleIds || []).map((id) => String(id).trim()).filter(Boolean);
+    let inClause = '';
+    if (ids.length > 0) {
+      const paramNames: string[] = [];
+      ids.forEach((id, idx) => {
+        const p = `vId${idx}`;
+        paramNames.push(`@${p}`);
+        request.input(p, sql.NVarChar(50), id);
+      });
+      inClause = `vehicleId IN (${paramNames.join(', ')})`;
+    } else if (vehicleId) {
+      request.input('vId', sql.NVarChar(50), vehicleId);
+    }
     // Build UTC date-only objects to avoid timezone shifts
     const toUtcDate = (s: string) => {
       const [yy, mm, dd] = s.split('-').map((n) => parseInt(n, 10));
@@ -882,7 +894,11 @@ export async function getFuelingLogsFiltered(params: { vehicleId?: string; from?
     if (from) request.input('fromDate', sql.Date, toUtcDate(from));
     if (to) request.input('toDate', sql.Date, toUtcDate(to));
     const where: string[] = [];
-    if (vehicleId) where.push('vehicleId = @vId');
+    if (inClause) {
+      where.push(inClause);
+    } else if (vehicleId) {
+      where.push('vehicleId = @vId');
+    }
     if (from) where.push('fuelingDate >= @fromDate');
     if (to) where.push('fuelingDate <= @toDate');
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
