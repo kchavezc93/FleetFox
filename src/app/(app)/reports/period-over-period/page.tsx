@@ -107,8 +107,19 @@ export default function PeriodOverPeriodReportPage() {
     if (!rows.length) return;
     const headers = [
       "Vehículo",
-      "Actual Costo (C$)",
-      "Anterior Costo (C$)",
+      // Fuel costs
+      "Combustible Ant. (C$)",
+      "Combustible Act. (C$)",
+      "Δ Combustible (C$)",
+      "% Combustible",
+      // Maintenance costs
+      "Mantenimiento Ant. (C$)",
+      "Mantenimiento Act. (C$)",
+      "Δ Mantenimiento (C$)",
+      "% Mantenimiento",
+      // Overall costs
+      "Costo Anterior (C$)",
+      "Costo Actual (C$)",
       "Δ Costo (C$)",
       "% Costo",
       "Actual Galones",
@@ -118,8 +129,19 @@ export default function PeriodOverPeriodReportPage() {
     ];
     const csv = [headers.join(","), ...rows.map(r => [
       `${r.plateNumber} (${r.brandModel})`,
-      r.currentOverallCost.toFixed(2),
+      // Fuel
+      r.prevFuelCost.toFixed(2),
+      r.currentFuelCost.toFixed(2),
+      r.deltaFuelCost.toFixed(2),
+      r.pctFuelCost == null ? "" : (r.pctFuelCost * 100).toFixed(1) + "%",
+      // Maintenance
+      r.prevMaintenanceCost.toFixed(2),
+      r.currentMaintenanceCost.toFixed(2),
+      r.deltaMaintenanceCost.toFixed(2),
+      r.pctMaintenanceCost == null ? "" : (r.pctMaintenanceCost * 100).toFixed(1) + "%",
+      // Overall
       r.prevOverallCost.toFixed(2),
+      r.currentOverallCost.toFixed(2),
       r.deltaOverallCost.toFixed(2),
       r.pctOverallCost == null ? "" : (r.pctOverallCost * 100).toFixed(1) + "%",
       r.currentGallons.toFixed(2),
@@ -231,10 +253,22 @@ export default function PeriodOverPeriodReportPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="font-semibold">Vehículo</TableHead>
-                    <TableHead className="text-right font-semibold">Costo Anterior</TableHead>
-                    <TableHead className="text-right font-semibold">Costo Actual</TableHead>
+                    {/* Fuel costs */}
+                    <TableHead className="text-right font-semibold">Comb. Ant.</TableHead>
+                    <TableHead className="text-right font-semibold">Comb. Act.</TableHead>
+                    <TableHead className="text-right font-semibold">Δ Comb.</TableHead>
+                    <TableHead className="text-right font-semibold">% Comb.</TableHead>
+                    {/* Maintenance costs */}
+                    <TableHead className="text-right font-semibold">Mant. Ant.</TableHead>
+                    <TableHead className="text-right font-semibold">Mant. Act.</TableHead>
+                    <TableHead className="text-right font-semibold">Δ Mant.</TableHead>
+                    <TableHead className="text-right font-semibold">% Mant.</TableHead>
+                    {/* Overall costs */}
+                    <TableHead className="text-right font-semibold">Costo Ant.</TableHead>
+                    <TableHead className="text-right font-semibold">Costo Act.</TableHead>
                     <TableHead className="text-right font-semibold">Δ Costo</TableHead>
                     <TableHead className="text-right font-semibold">% Costo</TableHead>
+                    {/* Gallons */}
                     <TableHead className="text-right font-semibold">Galones Ant.</TableHead>
                     <TableHead className="text-right font-semibold">Galones Act.</TableHead>
                     <TableHead className="text-right font-semibold">Δ Galones</TableHead>
@@ -245,10 +279,22 @@ export default function PeriodOverPeriodReportPage() {
                   {rows.map(r => (
                     <TableRow key={r.vehicleId}>
                       <TableCell className="font-medium">{r.plateNumber}</TableCell>
+                      {/* Fuel */}
+                      <TableCell className="text-right">{formatCurrency(r.prevFuelCost)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.currentFuelCost)}</TableCell>
+                      <TableCell className={`text-right ${r.deltaFuelCost > 0 ? 'text-red-600' : r.deltaFuelCost < 0 ? 'text-green-600' : ''}`}>{formatCurrency(r.deltaFuelCost)}</TableCell>
+                      <TableCell className="text-right">{formatPct(r.pctFuelCost)}</TableCell>
+                      {/* Maintenance */}
+                      <TableCell className="text-right">{formatCurrency(r.prevMaintenanceCost)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(r.currentMaintenanceCost)}</TableCell>
+                      <TableCell className={`text-right ${r.deltaMaintenanceCost > 0 ? 'text-red-600' : r.deltaMaintenanceCost < 0 ? 'text-green-600' : ''}`}>{formatCurrency(r.deltaMaintenanceCost)}</TableCell>
+                      <TableCell className="text-right">{formatPct(r.pctMaintenanceCost)}</TableCell>
+                      {/* Overall */}
                       <TableCell className="text-right">{formatCurrency(r.prevOverallCost)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(r.currentOverallCost)}</TableCell>
                       <TableCell className={`text-right ${r.deltaOverallCost > 0 ? 'text-red-600' : r.deltaOverallCost < 0 ? 'text-green-600' : ''}`}>{formatCurrency(r.deltaOverallCost)}</TableCell>
                       <TableCell className="text-right">{formatPct(r.pctOverallCost)}</TableCell>
+                      {/* Gallons */}
                       <TableCell className="text-right">{r.prevGallons.toFixed(2)}</TableCell>
                       <TableCell className="text-right">{r.currentGallons.toFixed(2)}</TableCell>
                       <TableCell className={`text-right ${r.deltaGallons > 0 ? 'text-red-600' : r.deltaGallons < 0 ? 'text-green-600' : ''}`}>{r.deltaGallons.toFixed(2)}</TableCell>
@@ -258,10 +304,22 @@ export default function PeriodOverPeriodReportPage() {
                   {totals && (
                     <TableRow>
                       <TableCell className="font-bold">Totales</TableCell>
+                      {/* Fuel totals */}
+                      <TableCell className="text-right font-bold">{formatCurrency(totals.prevFuelCost)}</TableCell>
+                      <TableCell className="text-right font-bold">{formatCurrency(totals.currentFuelCost)}</TableCell>
+                      <TableCell className={`text-right font-bold ${totals.deltaFuelCost > 0 ? 'text-red-700' : totals.deltaFuelCost < 0 ? 'text-green-700' : ''}`}>{formatCurrency(totals.deltaFuelCost)}</TableCell>
+                      <TableCell className="text-right font-bold">{formatPct(totals.pctFuelCost)}</TableCell>
+                      {/* Maintenance totals */}
+                      <TableCell className="text-right font-bold">{formatCurrency(totals.prevMaintenanceCost)}</TableCell>
+                      <TableCell className="text-right font-bold">{formatCurrency(totals.currentMaintenanceCost)}</TableCell>
+                      <TableCell className={`text-right font-bold ${totals.deltaMaintenanceCost > 0 ? 'text-red-700' : totals.deltaMaintenanceCost < 0 ? 'text-green-700' : ''}`}>{formatCurrency(totals.deltaMaintenanceCost)}</TableCell>
+                      <TableCell className="text-right font-bold">{formatPct(totals.pctMaintenanceCost)}</TableCell>
+                      {/* Overall totals */}
                       <TableCell className="text-right font-bold">{formatCurrency(totals.prevOverallCost)}</TableCell>
                       <TableCell className="text-right font-bold">{formatCurrency(totals.currentOverallCost)}</TableCell>
                       <TableCell className={`text-right font-bold ${totals.deltaOverallCost > 0 ? 'text-red-700' : totals.deltaOverallCost < 0 ? 'text-green-700' : ''}`}>{formatCurrency(totals.deltaOverallCost)}</TableCell>
                       <TableCell className="text-right font-bold">{formatPct(totals.pctOverallCost)}</TableCell>
+                      {/* Gallons totals */}
                       <TableCell className="text-right font-bold">{totals.prevGallons.toFixed(2)}</TableCell>
                       <TableCell className="text-right font-bold">{totals.currentGallons.toFixed(2)}</TableCell>
                       <TableCell className={`text-right font-bold ${totals.deltaGallons > 0 ? 'text-red-700' : totals.deltaGallons < 0 ? 'text-green-700' : ''}`}>{totals.deltaGallons.toFixed(2)}</TableCell>

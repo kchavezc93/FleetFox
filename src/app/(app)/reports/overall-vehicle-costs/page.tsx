@@ -26,7 +26,7 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function OverallVehicleCostsReportPage() {
   const [summaries, setSummaries] = useState<OverallVehicleCostSummary[]>([]);
@@ -271,25 +271,20 @@ export default function OverallVehicleCostsReportPage() {
             className="h-72 lg:h-80"
           >
             <ResponsiveContainer>
-              <AreaChart data={summaries.map(s => ({ name: s.plateNumber, fuel: s.totalFuelingCost, maint: s.totalMaintenanceCost }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
-                <defs>
-                  <linearGradient id="grad-maint-page" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
-                  </linearGradient>
-                  <linearGradient id="grad-fuel-page" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={summaries.map(s => ({ name: s.plateNumber, fuel: s.totalFuelingCost, maint: s.totalMaintenanceCost }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis width={84} tickMargin={8} tickLine={false} axisLine={false}
+                  tickFormatter={(v) => new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(v))}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
+                  const label = name === 'maint' ? 'Mantenimiento' : name === 'fuel' ? 'Combustible' : String(name);
+                  return `${label}: ${new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' }).format(Number(value))}`;
+                }} />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Area type="monotone" dataKey="maint" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-maint-page)" />
-                <Area type="monotone" dataKey="fuel" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-fuel-page)" />
-              </AreaChart>
+                <Bar dataKey="maint" fill="hsl(var(--chart-2))" radius={[6,6,0,0]} />
+                <Bar dataKey="fuel" fill="hsl(var(--chart-1))" radius={[6,6,0,0]} />
+              </BarChart>
             </ResponsiveContainer>
           </ChartContainer>
         </CardContent>

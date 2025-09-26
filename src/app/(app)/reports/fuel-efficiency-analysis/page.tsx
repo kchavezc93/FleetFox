@@ -11,7 +11,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
-import { TrendingUp, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
+import { TrendingUp, FileDown, CalendarDays, Printer } from "lucide-react";
 import { exportToXLSX } from "@/lib/export-excel";
 import type { FuelEfficiencyStats } from "@/lib/actions/report-actions";
 import {
@@ -24,9 +24,8 @@ import {
 } from "@/components/ui/table";
 import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
-import Image from "next/image";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar } from "recharts";
 
 export default function FuelEfficiencyAnalysisPage() {
   const [efficiencyData, setEfficiencyData] = useState<FuelEfficiencyStats[]>([]);
@@ -104,7 +103,14 @@ export default function FuelEfficiencyAnalysisPage() {
   const handleExportCSV = () => {
     if (efficiencyData.length === 0) return;
 
-    const headers = ["Vehículo (Matrícula)", "Marca y Modelo", "Eficiencia Prom. (km/gal)", "Eficiencia Mín. (km/gal)", "Eficiencia Máx. (km/gal)", "Núm. Registros"];
+    const headers = [
+      "Vehículo (Matrícula)",
+      "Marca y Modelo",
+      "Eficiencia Prom. (km/gal)",
+      "Eficiencia Mín. (km/gal)",
+      "Eficiencia Máx. (km/gal)",
+      "Núm. Registros",
+    ];
     const csvRows = [
       headers.join(','),
       ...efficiencyData.map(d => [
@@ -113,7 +119,7 @@ export default function FuelEfficiencyAnalysisPage() {
         d.averageEfficiency?.toFixed(1) ?? 'N/A',
         d.minEfficiency?.toFixed(1) ?? 'N/A',
         d.maxEfficiency?.toFixed(1) ?? 'N/A',
-        d.logCount
+        d.logCount,
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -122,7 +128,7 @@ export default function FuelEfficiencyAnalysisPage() {
     if (link.download !== undefined) {
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', 'informe_analisis_eficiencia.csv');
+      link.setAttribute('download', 'analisis_eficiencia_combustible.csv');
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -133,22 +139,31 @@ export default function FuelEfficiencyAnalysisPage() {
   const handleExportXLSX = async () => {
     if (efficiencyData.length === 0) return;
     const rows = efficiencyData.map(d => ({
-      "Vehículo (Matrícula)": d.plateNumber,
-      "Marca y Modelo": d.brandModel,
-      "Eficiencia Prom. (km/gal)": d.averageEfficiency != null ? Number(d.averageEfficiency.toFixed(1)) : null,
-      "Eficiencia Mín. (km/gal)": d.minEfficiency != null ? Number(d.minEfficiency.toFixed(1)) : null,
-      "Eficiencia Máx. (km/gal)": d.maxEfficiency != null ? Number(d.maxEfficiency.toFixed(1)) : null,
-      "Núm. Registros": d.logCount,
+      plate: d.plateNumber,
+      brandModel: d.brandModel,
+      avgEff: d.averageEfficiency != null ? Number(d.averageEfficiency.toFixed(1)) : null,
+      minEff: d.minEfficiency != null ? Number(d.minEfficiency.toFixed(1)) : null,
+      maxEff: d.maxEfficiency != null ? Number(d.maxEfficiency.toFixed(1)) : null,
+      logCount: d.logCount,
     }));
-    await exportToXLSX(rows, "informe_analisis_eficiencia", "Eficiencia");
+    await exportToXLSX({
+      rows,
+      columns: [
+        { key: "plate", header: "Vehículo (Matrícula)", width: 18 },
+        { key: "brandModel", header: "Marca y Modelo", width: 28 },
+        { key: "avgEff", header: "Eficiencia Prom. (km/gal)", format: "decimal" },
+        { key: "minEff", header: "Eficiencia Mín. (km/gal)", format: "decimal" },
+        { key: "maxEff", header: "Eficiencia Máx. (km/gal)", format: "decimal" },
+        { key: "logCount", header: "Núm. Registros", format: "integer" },
+      ],
+    }, "analisis_eficiencia_combustible", "Eficiencia");
   };
-
 
   return (
     <>
       <PageHeader
-        title="Informe de Análisis de Eficiencia de Combustible"
-        description="Analiza tendencias y compara la eficiencia de combustible (km/gal) entre vehículos."
+        title="Análisis de Eficiencia de Combustible"
+        description="Promedio, mínimo y máximo de eficiencia (km/gal) por vehículo."
         icon={TrendingUp}
         actions={
           <div className="page-header-actions flex items-center gap-2">
@@ -198,7 +213,7 @@ export default function FuelEfficiencyAnalysisPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-             <Button variant="outline" onClick={handlePrint}>
+            <Button variant="outline" onClick={handlePrint}>
               <Printer className="mr-2 h-4 w-4" /> Imprimir
             </Button>
             <div className="flex gap-2">
@@ -212,6 +227,7 @@ export default function FuelEfficiencyAnalysisPage() {
           </div>
         }
       />
+
       <Card className="shadow-lg printable-area">
         <CardHeader>
           <CardTitle className="text-2xl">Análisis de Eficiencia por Vehículo</CardTitle>
@@ -268,30 +284,19 @@ export default function FuelEfficiencyAnalysisPage() {
             className="h-72 lg:h-80"
           >
             <ResponsiveContainer>
-              <AreaChart data={efficiencyData.map(d => ({ name: d.plateNumber, avgEfficiency: d.averageEfficiency ?? 0, minEfficiency: d.minEfficiency ?? 0, maxEfficiency: d.maxEfficiency ?? 0 }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
-                <defs>
-                  <linearGradient id="grad-avg" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
-                  </linearGradient>
-                  <linearGradient id="grad-min" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
-                  </linearGradient>
-                  <linearGradient id="grad-max" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.05} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={efficiencyData.map(d => ({ name: d.plateNumber, avgEfficiency: d.averageEfficiency ?? 0, minEfficiency: d.minEfficiency ?? 0, maxEfficiency: d.maxEfficiency ?? 0 }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis width={72} tickMargin={8} tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
+                  const label = name === 'avgEfficiency' ? 'Promedio' : name === 'minEfficiency' ? 'Mínimo' : name === 'maxEfficiency' ? 'Máximo' : String(name);
+                  return `${label}: ${Number(value).toFixed(1)} km/gal`;
+                }} />
                 <ChartLegend content={<ChartLegendContent />} />
-                <Area type="monotone" dataKey="avgEfficiency" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-avg)" />
-                <Area type="monotone" dataKey="minEfficiency" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-min)" />
-                <Area type="monotone" dataKey="maxEfficiency" stroke="hsl(var(--chart-3))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-max)" />
-              </AreaChart>
+                <Bar dataKey="avgEfficiency" fill="hsl(var(--chart-1))" radius={[6,6,0,0]} />
+                <Bar dataKey="minEfficiency" fill="hsl(var(--chart-2))" radius={[6,6,0,0]} />
+                <Bar dataKey="maxEfficiency" fill="hsl(var(--chart-3))" radius={[6,6,0,0]} />
+              </BarChart>
             </ResponsiveContainer>
           </ChartContainer>
         </CardContent>

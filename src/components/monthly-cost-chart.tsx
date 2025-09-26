@@ -2,7 +2,7 @@
 
 import React from "react";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 type Props = {
   maintenance: number;
@@ -14,8 +14,7 @@ type Props = {
 export default function MonthlyCostChart({ maintenance, fueling, currency = "NIO", locale = "es-NI" }: Props) {
   const data = React.useMemo(
     () => [
-      { name: "Mantenimiento", maintenance: Number(maintenance) || 0 },
-      { name: "Combustible", fueling: Number(fueling) || 0 },
+      { name: "Mes actual", maintenance: Number(maintenance) || 0, fueling: Number(fueling) || 0 },
     ],
     [maintenance, fueling]
   );
@@ -32,7 +31,7 @@ export default function MonthlyCostChart({ maintenance, fueling, currency = "NIO
       className="w-full h-64"
     >
       <ResponsiveContainer>
-        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
+        <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="name" tickLine={false} axisLine={false} />
           <YAxis width={84} tickMargin={8} tickLine={false} axisLine={false} tickFormatter={(v) => nf.format(Number(v))} />
@@ -41,9 +40,9 @@ export default function MonthlyCostChart({ maintenance, fueling, currency = "NIO
             return `${label}: ${nf.format(Number(value))}`;
           }} />
           <Legend content={<ChartLegendContent />} />
-          <Line type="monotone" dataKey="maintenance" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="fueling" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
-        </LineChart>
+          <Bar dataKey="maintenance" fill="hsl(var(--chart-2))" radius={[6, 6, 0, 0]} />
+          <Bar dataKey="fueling" fill="hsl(var(--chart-1))" radius={[6, 6, 0, 0]} />
+        </BarChart>
       </ResponsiveContainer>
     </ChartContainer>
   );

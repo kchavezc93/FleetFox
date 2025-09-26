@@ -35,6 +35,7 @@ import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartToo
 import SixMonthsCostChart from "@/components/six-months-cost-chart";
 import MonthlyCostPerKmChart from "@/components/monthly-cost-per-km-chart";
 import MonthlyEfficiencyChart from "@/components/monthly-efficiency-chart";
+import MonthlyKmDrivenChart from "@/components/monthly-km-driven-chart";
 import { exportToXLSX, exportMultipleSheetsToXLSX } from "@/lib/export-excel";
 
 //
@@ -58,6 +59,7 @@ export default function ComparativeExpenseAnalysisPage() {
   const [trend, setTrend] = useState<{ label: string; maintenance: number; fueling: number }[]>([]);
   const [trendCostPerKm, setTrendCostPerKm] = useState<{ label: string; costPerKm: number | null }[]>([]);
   const [trendEfficiency, setTrendEfficiency] = useState<{ label: string; avgEfficiency: number | null }[]>([]);
+  const [trendKmDriven, setTrendKmDriven] = useState<{ label: string; kmDriven: number | null }[]>([]);
 
   const applyPreset = (preset: string) => {
     const today = new Date();
@@ -121,10 +123,12 @@ export default function ComparativeExpenseAnalysisPage() {
           setTrend(mapped.map((pt: any) => ({ label: pt.label, maintenance: Number(pt.maintenanceCost)||0, fueling: Number(pt.fuelingCost)||0 })));
           setTrendCostPerKm(mapped.map((pt: any) => ({ label: pt.label, costPerKm: pt.costPerKm != null ? Number(pt.costPerKm) : null })));
           setTrendEfficiency(mapped.map((pt: any) => ({ label: pt.label, avgEfficiency: pt.avgEfficiency != null ? Number(pt.avgEfficiency) : null })));
+          setTrendKmDriven(mapped.map((pt: any) => ({ label: pt.label, kmDriven: pt.kmDriven != null ? Number(pt.kmDriven) : null })));
         } else {
           setTrend([]);
           setTrendCostPerKm([]);
           setTrendEfficiency([]);
+          setTrendKmDriven([]);
         }
       } catch (error) {
         console.error("Error loading comparative summary:", error);
@@ -132,6 +136,7 @@ export default function ComparativeExpenseAnalysisPage() {
   setTrend([]);
   setTrendCostPerKm([]);
   setTrendEfficiency([]);
+  setTrendKmDriven([]);
       } finally {
         setIsLoading(false);
       }
@@ -481,7 +486,7 @@ export default function ComparativeExpenseAnalysisPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <Card className="shadow-lg printable-area">
           <CardHeader>
             <CardTitle>Costo por Km (Mensual)</CardTitle>
@@ -499,6 +504,16 @@ export default function ComparativeExpenseAnalysisPage() {
           </CardHeader>
           <CardContent>
             <MonthlyEfficiencyChart data={trendEfficiency} />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg printable-area">
+          <CardHeader>
+            <CardTitle>Kilómetros Recorridos (Mensual)</CardTitle>
+            <CardDescription>Estimación mensual de km recorridos a partir de registros.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyKmDrivenChart data={trendKmDriven} />
           </CardContent>
         </Card>
       </div>
