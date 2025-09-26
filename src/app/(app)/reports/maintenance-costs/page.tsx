@@ -27,7 +27,7 @@ import { useState, useEffect } from "react";
 // Fetch data via API routes to avoid importing server actions into client components
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 
 export default function MaintenanceCostsReportPage() {
@@ -267,26 +267,38 @@ export default function MaintenanceCostsReportPage() {
 
        <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Desglose de Costos (Gráfico Marcador de Posición)</CardTitle>
-          <CardDescription>Representación visual de los costos de mantenimiento por tipo o categoría. La funcionalidad completa depende de la implementación de la base de datos.</CardDescription>
+          <CardTitle>Desglose de Costos de Mantenimiento</CardTitle>
+          <CardDescription>Comparación por vehículo entre costos preventivos y correctivos.</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              preventive: { label: "Preventivo", color: "#2563eb" },
-              corrective: { label: "Correctivo", color: "#f59e0b" },
+              preventive: { label: "Preventivo", color: "hsl(var(--chart-1))" },
+              corrective: { label: "Correctivo", color: "hsl(var(--chart-2))" },
             }}
-            className="h-64"
+            className="h-72 lg:h-80"
           >
-            <BarChart data={summaries.map(s => ({ label: s.plateNumber, preventive: s.totalPreventiveCost, corrective: s.totalCorrectiveCost }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="preventive" stackId="cost" fill="var(--color-preventive)" />
-              <Bar dataKey="corrective" stackId="cost" fill="var(--color-corrective)" />
-            </BarChart>
+            <ResponsiveContainer>
+              <AreaChart data={summaries.map(s => ({ name: s.plateNumber, preventive: s.totalPreventiveCost, corrective: s.totalCorrectiveCost }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
+                <defs>
+                  <linearGradient id="grad-prev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="grad-corr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area type="monotone" dataKey="preventive" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-prev)" />
+                <Area type="monotone" dataKey="corrective" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-corr)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </ChartContainer>
         </CardContent>
       </Card>

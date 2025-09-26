@@ -26,7 +26,7 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function FuelConsumptionReportPage() {
   const [summaries, setSummaries] = useState<FuelConsumptionSummary[]>([]);
@@ -264,26 +264,38 @@ export default function FuelConsumptionReportPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Registros Detallados (Marcador de posición)</CardTitle>
-          <CardDescription>Entradas individuales de carga de combustible. Esta sección normalmente tendría paginación y filtros más detallados. La funcionalidad completa depende de la implementación de la base de datos.</CardDescription>
+          <CardTitle>Comparación por Vehículo</CardTitle>
+          <CardDescription>Galones totales y costo total por vehículo.</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              gallons: { label: "Galones", color: "#2563eb" },
-              cost: { label: "Costo (C$)", color: "#22c55e" },
+              gallons: { label: "Galones", color: "hsl(var(--chart-1))" },
+              cost: { label: "Costo (C$)", color: "hsl(var(--chart-2))" },
             }}
-            className="h-64"
+            className="h-72 lg:h-80"
           >
-            <BarChart data={summaries.map(s => ({ label: s.plateNumber, gallons: Number(s.totalGallons.toFixed(2)), cost: Number(s.totalCost.toFixed(2)) }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="gallons" fill="var(--color-gallons)" />
-              <Bar dataKey="cost" fill="var(--color-cost)" />
-            </BarChart>
+            <ResponsiveContainer>
+              <AreaChart data={summaries.map(s => ({ name: s.plateNumber, gallons: Number(s.totalGallons.toFixed(2)), cost: Number(s.totalCost.toFixed(2)) }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
+                <defs>
+                  <linearGradient id="grad-gal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="grad-cost" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area type="monotone" dataKey="gallons" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-gal)" />
+                <Area type="monotone" dataKey="cost" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-cost)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </ChartContainer>
         </CardContent>
       </Card>

@@ -26,7 +26,7 @@ import Image from "next/image";
 import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function OverallVehicleCostsReportPage() {
   const [summaries, setSummaries] = useState<OverallVehicleCostSummary[]>([]);
@@ -259,26 +259,38 @@ export default function OverallVehicleCostsReportPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle className="text-xl">Visualización de Costos (Marcador de posición)</CardTitle>
-          <CardDescription>Gráfico comparativo de costos por vehículo. Funcionalidad pendiente de implementación de base de datos.</CardDescription>
+          <CardTitle className="text-xl">Comparación de Costos por Vehículo</CardTitle>
+          <CardDescription>Visualización comparativa de costos de combustible y mantenimiento por vehículo.</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              fuel: { label: "Combustible", color: "#22c55e" },
-              maint: { label: "Mantenimiento", color: "#f59e0b" },
+              fuel: { label: "Combustible", color: "hsl(var(--chart-1))" },
+              maint: { label: "Mantenimiento", color: "hsl(var(--chart-2))" },
             }}
-            className="h-64"
+            className="h-72 lg:h-80"
           >
-            <BarChart data={summaries.map(s => ({ label: s.plateNumber, fuel: s.totalFuelingCost, maint: s.totalMaintenanceCost }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="fuel" stackId="cost" fill="var(--color-fuel)" />
-              <Bar dataKey="maint" stackId="cost" fill="var(--color-maint)" />
-            </BarChart>
+            <ResponsiveContainer>
+              <AreaChart data={summaries.map(s => ({ name: s.plateNumber, fuel: s.totalFuelingCost, maint: s.totalMaintenanceCost }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
+                <defs>
+                  <linearGradient id="grad-maint-page" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="grad-fuel-page" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area type="monotone" dataKey="maint" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-maint-page)" />
+                <Area type="monotone" dataKey="fuel" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-fuel-page)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </ChartContainer>
         </CardContent>
       </Card>

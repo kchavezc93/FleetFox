@@ -91,6 +91,7 @@ Para desarrollo, si las variables de entorno no están completas, `src/lib/db.ts
     *   Actualiza las variables en `.env`:
     *   `NEXT_PUBLIC_COMPANY_NAME`: Nombre de la empresa (ej. "Dos Robles").
     *   `NEXT_PUBLIC_COMPANY_LOGO_URL`: URL o ruta local a la imagen del logo (ej. `/logo.png` si está en la carpeta `public`).
+    *   `APP_CURRENCY` y `APP_LOCALE`: Formato de moneda e idioma de la UI (ej. `NIO` y `es-NI`).
         *   **Variables de Base de Datos**:
             *   `DB_TYPE`: Tipo de base de datos (ej. "SQLServer").
             *   `DB_HOST`: Host de tu servidor de base de datos (ej. "localhost").
@@ -171,6 +172,7 @@ cmd /c "npm run start"
 - Acceso: ir a `/` debe redirigir a login si no hay sesión; con sesión válida, al dashboard.
 - Login/Logout: iniciar sesión con un usuario válido; cerrar sesión desde el header.
 - Rutas protegidas: no autenticado no debe acceder a `/vehicles`, `/maintenance`, `/fueling`, `/reports`, `/settings`.
+- Accesos rápidos del dashboard deben respetar permisos: probar que usuarios sin permiso no puedan entrar a `/vehicles/new`, `/maintenance/new`, `/fueling/new` (debe ir a `/forbidden`).
 - Vehículos: crear/editar; activar/inactivar; exportar listado a XLSX.
 - Combustible: crear y listar con filtros; exportar a XLSX.
 - Mantenimiento: crear/editar; adjuntar/eliminar archivos; exportar a XLSX con columnas de auditoría.

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChartHorizontalBig, FileDown, Filter, CalendarDays, Printer } from "lucide-react";
+import { formatCurrency, formatNumber, getCurrency, getLocale } from "@/lib/currency";
 import type { Vehicle } from "@/types";
 import {
   Table,
@@ -31,7 +32,9 @@ import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } fro
 import { es } from "date-fns/locale";
 import { DateRange } from "react-day-picker";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import SixMonthsCostChart from "@/components/six-months-cost-chart";
+import MonthlyCostPerKmChart from "@/components/monthly-cost-per-km-chart";
+import MonthlyEfficiencyChart from "@/components/monthly-efficiency-chart";
 import { exportToXLSX, exportMultipleSheetsToXLSX } from "@/lib/export-excel";
 
 //
@@ -50,6 +53,11 @@ export default function ComparativeExpenseAnalysisPage() {
       to: endOfMonth(today),
     };
   });
+
+  // Monthly trend data for charts
+  const [trend, setTrend] = useState<{ label: string; maintenance: number; fueling: number }[]>([]);
+  const [trendCostPerKm, setTrendCostPerKm] = useState<{ label: string; costPerKm: number | null }[]>([]);
+  const [trendEfficiency, setTrendEfficiency] = useState<{ label: string; avgEfficiency: number | null }[]>([]);
 
   const applyPreset = (preset: string) => {
     const today = new Date();
@@ -100,9 +108,30 @@ export default function ComparativeExpenseAnalysisPage() {
         if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
         const s = await res.json();
         setSummary(s);
+
+        // Load monthly trend for the same filters (vehicle/date)
+        const trendParams = new URLSearchParams();
+        if (dateRange?.from) trendParams.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) trendParams.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+        if (selectedVehicleId !== "all") trendParams.set("vehicleId", selectedVehicleId);
+        const resTrend = await fetch(`/api/reports/monthly-trend?${trendParams.toString()}`, { cache: "no-store" });
+        if (resTrend.ok) {
+          const tr = await resTrend.json();
+          const mapped = (tr || []);
+          setTrend(mapped.map((pt: any) => ({ label: pt.label, maintenance: Number(pt.maintenanceCost)||0, fueling: Number(pt.fuelingCost)||0 })));
+          setTrendCostPerKm(mapped.map((pt: any) => ({ label: pt.label, costPerKm: pt.costPerKm != null ? Number(pt.costPerKm) : null })));
+          setTrendEfficiency(mapped.map((pt: any) => ({ label: pt.label, avgEfficiency: pt.avgEfficiency != null ? Number(pt.avgEfficiency) : null })));
+        } else {
+          setTrend([]);
+          setTrendCostPerKm([]);
+          setTrendEfficiency([]);
+        }
       } catch (error) {
         console.error("Error loading comparative summary:", error);
-        setSummary(null);
+  setSummary(null);
+  setTrend([]);
+  setTrendCostPerKm([]);
+  setTrendEfficiency([]);
       } finally {
         setIsLoading(false);
       }
@@ -373,27 +402,27 @@ export default function ComparativeExpenseAnalysisPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               <Card className="bg-muted/30">
                 <CardHeader><CardTitle className="text-sm font-medium">Costo Mantenimiento</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">C${comparativeData.totalMaintenanceCost.toFixed(2)}</p></CardContent>
+                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalMaintenanceCost)}</p></CardContent>
               </Card>
               <Card className="bg-muted/30">
                 <CardHeader><CardTitle className="text-sm font-medium">Costo Combustible</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">C${comparativeData.totalFuelingCost.toFixed(2)}</p></CardContent>
+                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalFuelingCost)}</p></CardContent>
               </Card>
               <Card className="bg-primary text-primary-foreground">
                 <CardHeader><CardTitle className="text-sm font-medium">Costo Total General</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">C${comparativeData.totalOverallCost.toFixed(2)}</p></CardContent>
+                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalOverallCost)}</p></CardContent>
               </Card>
               <Card>
                 <CardHeader><CardTitle className="text-sm font-medium">Galones Consumidos</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.totalGallonsConsumed.toFixed(2)}</p></CardContent>
+                <CardContent><p className="text-xl">{formatNumber(comparativeData.totalGallonsConsumed, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</p></CardContent>
               </Card>
               <Card>
                 <CardHeader><CardTitle className="text-sm font-medium">Km Recorridos (Período)</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.kmDrivenInPeriod?.toLocaleString() ?? 'N/A'}</p></CardContent>
+                <CardContent><p className="text-xl">{comparativeData.kmDrivenInPeriod != null ? formatNumber(comparativeData.kmDrivenInPeriod) : 'N/A'}</p></CardContent>
               </Card>
               <Card>
                 <CardHeader><CardTitle className="text-sm font-medium">Costo por Km (General)</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.costPerKm ? `C$${comparativeData.costPerKm.toFixed(2)}` : 'N/A'}</p></CardContent>
+                <CardContent><p className="text-xl">{comparativeData.costPerKm != null ? formatCurrency(comparativeData.costPerKm) : 'N/A'}</p></CardContent>
               </Card>
                <Card>
                 <CardHeader><CardTitle className="text-sm font-medium">Eficiencia Prom. (km/gal)</CardTitle></CardHeader>
@@ -429,10 +458,10 @@ export default function ComparativeExpenseAnalysisPage() {
                     <TableRow key={v.vehicleId}>
                       <TableCell>{v.plateNumber}</TableCell>
                       <TableCell>{v.brandModel}</TableCell>
-                      <TableCell className="text-right">C${v.maintenanceCost.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">C${v.fuelingCost.toFixed(2)}</TableCell>
-                      <TableCell className="text-right font-semibold">C${v.totalCost.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{v.kmDriven?.toLocaleString() ?? 'N/A'}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(v.maintenanceCost)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(v.fuelingCost)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatCurrency(v.totalCost)}</TableCell>
+                      <TableCell className="text-right">{v.kmDriven != null ? formatNumber(v.kmDriven) : 'N/A'}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -444,29 +473,35 @@ export default function ComparativeExpenseAnalysisPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Gráfico Comparativo</CardTitle>
-          <CardDescription>Visualización resumida de costos por vehículo según filtros.</CardDescription>
+          <CardTitle>Gastos por Mes</CardTitle>
+          <CardDescription>Tendencia mensual de mantenimiento y combustible según filtros.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer
-            config={{
-              fuel: { label: "Combustible", color: "#22c55e" },
-              maint: { label: "Mantenimiento", color: "#f59e0b" },
-            }}
-            className="h-64"
-          >
-            <BarChart data={comparativeData.vehicleBreakdown.map(v => ({ label: v.plateNumber, fuel: v.fuelingCost, maint: v.maintenanceCost }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="fuel" stackId="cost" fill="var(--color-fuel)" />
-              <Bar dataKey="maint" stackId="cost" fill="var(--color-maint)" />
-            </BarChart>
-          </ChartContainer>
+          <SixMonthsCostChart data={trend} />
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+        <Card className="shadow-lg printable-area">
+          <CardHeader>
+            <CardTitle>Costo por Km (Mensual)</CardTitle>
+            <CardDescription>Relación de costo total sobre kilómetros recorridos por mes.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyCostPerKmChart data={trendCostPerKm} />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-lg printable-area">
+          <CardHeader>
+            <CardTitle>Eficiencia (km/gal) Mensual</CardTitle>
+            <CardDescription>Promedio mensual de eficiencia de combustible.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MonthlyEfficiencyChart data={trendEfficiency} />
+          </CardContent>
+        </Card>
+      </div>
     </>
   );
 }

@@ -890,3 +890,128 @@ export async function getPeriodOverPeriodSummary(params: ReportParams = {}): Pro
     }, meta: { startDate: startDate ?? null, endDate: endDate ?? null, prevStartDate: null, prevEndDate: null } };
   }
 }
+
+// -------- Monthly costs trend (last 6 months) --------
+export type MonthlyTrendPoint = {
+  year: number;
+  month: number; // 1-12
+  label: string; // e.g., 2025-09
+  maintenanceCost: number;
+  fuelingCost: number;
+  totalCost: number;
+  kmDriven: number | null;
+  avgEfficiency: number | null; // km/gal average in month
+  costPerKm: number | null;
+};
+
+export async function getMonthlyCostsTrend(params: { startDate?: string; endDate?: string; vehicleId?: string } = {}): Promise<MonthlyTrendPoint[]> {
+  const dbClient = await getDbClient();
+  if (!dbClient || dbClient.type !== "SQLServer") return [];
+  const pool = (dbClient as any).pool as sql.ConnectionPool;
+  if (!pool) return [];
+
+  // Determine range: default to current month and previous 5 months (6 total)
+  const now = new Date();
+  const firstOfCurrent = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const firstOfStart = new Date(Date.UTC(firstOfCurrent.getUTCFullYear(), firstOfCurrent.getUTCMonth() - 5, 1));
+  const startISO = (params.startDate ?? firstOfStart.toISOString().slice(0, 10));
+  // End at last day of current month by default
+  const lastOfCurrent = new Date(Date.UTC(firstOfCurrent.getUTCFullYear(), firstOfCurrent.getUTCMonth() + 1, 0));
+  const endISO = (params.endDate ?? lastOfCurrent.toISOString().slice(0, 10));
+
+  try {
+    const request = pool.request();
+    request.input("startDate", sql.Date, startISO);
+    request.input("endDate", sql.Date, endISO);
+    if (params.vehicleId) request.input("vehicleId", sql.NVarChar(50), params.vehicleId);
+
+  const vehicleFilterMaint = params.vehicleId ? "AND m.vehicleId = @vehicleId" : "";
+  const vehicleFilterFuel = params.vehicleId ? "AND f.vehicleId = @vehicleId" : "";
+  const vehicleFilterUnionMaint = params.vehicleId ? "AND ml.vehicleId = @vehicleId" : "";
+  const vehicleFilterUnionFuel = params.vehicleId ? "AND fl.vehicleId = @vehicleId" : "";
+
+    const query = `
+      WITH months AS (
+        SELECT CAST(DATEFROMPARTS(YEAR(@startDate), MONTH(@startDate), 1) AS DATE) AS monthStart
+        UNION ALL
+        SELECT DATEADD(MONTH, 1, monthStart) FROM months
+        WHERE monthStart <= CAST(DATEFROMPARTS(YEAR(@endDate), MONTH(@endDate), 1) AS DATE)
+      ), maint AS (
+        SELECT YEAR(m.executionDate) AS y, MONTH(m.executionDate) AS m, SUM(m.cost) AS maintenanceCost
+        FROM maintenance_logs m
+        WHERE m.executionDate >= @startDate AND m.executionDate <= @endDate
+        ${vehicleFilterMaint}
+        GROUP BY YEAR(m.executionDate), MONTH(m.executionDate)
+      ), fuel AS (
+        SELECT YEAR(f.fuelingDate) AS y, MONTH(f.fuelingDate) AS m, SUM(f.totalCost) AS fuelingCost,
+               AVG(CASE WHEN f.fuelEfficiencyKmPerGallon IS NOT NULL THEN f.fuelEfficiencyKmPerGallon END) AS avgEfficiency
+        FROM fueling_logs f
+        WHERE f.fuelingDate >= @startDate AND f.fuelingDate <= @endDate
+        ${vehicleFilterFuel}
+        GROUP BY YEAR(f.fuelingDate), MONTH(f.fuelingDate)
+      ), month_points AS (
+        SELECT YEAR(p.d) AS y, MONTH(p.d) AS m, p.vehicleId, p.mileage
+        FROM (
+          SELECT ml.executionDate AS d, ml.vehicleId, ml.mileageAtService AS mileage
+          FROM maintenance_logs ml
+          WHERE ml.executionDate >= @startDate AND ml.executionDate <= @endDate ${vehicleFilterUnionMaint}
+          UNION ALL
+          SELECT fl.fuelingDate AS d, fl.vehicleId, fl.mileageAtFueling AS mileage
+          FROM fueling_logs fl
+          WHERE fl.fuelingDate >= @startDate AND fl.fuelingDate <= @endDate ${vehicleFilterUnionFuel}
+        ) p
+        WHERE p.mileage IS NOT NULL
+      ), monthly_mileage AS (
+        SELECT y, m, vehicleId, MIN(mileage) AS minMileage, MAX(mileage) AS maxMileage, COUNT(1) AS points
+        FROM month_points
+        GROUP BY y, m, vehicleId
+      ), km AS (
+        SELECT y, m,
+               SUM(CASE WHEN points >= 2 THEN (maxMileage - minMileage) ELSE 0 END) AS kmDriven
+        FROM monthly_mileage
+        GROUP BY y, m
+      )
+      SELECT 
+        YEAR(months.monthStart) AS y,
+        MONTH(months.monthStart) AS m,
+        ISNULL(maint.maintenanceCost, 0) AS maintenanceCost,
+        ISNULL(fuel.fuelingCost, 0) AS fuelingCost,
+        ISNULL(km.kmDriven, 0) AS kmDriven,
+        fuel.avgEfficiency AS avgEfficiency
+      FROM months
+      LEFT JOIN maint ON maint.y = YEAR(months.monthStart) AND maint.m = MONTH(months.monthStart)
+      LEFT JOIN fuel ON fuel.y = YEAR(months.monthStart) AND fuel.m = MONTH(months.monthStart)
+      LEFT JOIN km ON km.y = YEAR(months.monthStart) AND km.m = MONTH(months.monthStart)
+      ORDER BY y, m
+      OPTION (MAXRECURSION 100)
+    `;
+
+    const result = await request.query(query);
+    const rows = (result.recordset || []) as any[];
+    return rows.map((r) => {
+      const year = Number(r.y);
+      const month = Number(r.m);
+      const label = `${year}-${String(month).padStart(2, '0')}`;
+      const maintenanceCost = parseFloat(r.maintenanceCost ?? 0);
+      const fuelingCost = parseFloat(r.fuelingCost ?? 0);
+      const kmDriven = r.kmDriven != null ? Number(r.kmDriven) : null;
+      const avgEfficiency = r.avgEfficiency != null ? parseFloat(r.avgEfficiency) : null;
+      const totalCost = maintenanceCost + fuelingCost;
+      const costPerKm = kmDriven && kmDriven > 0 ? totalCost / kmDriven : null;
+      return {
+        year,
+        month,
+        label,
+        maintenanceCost,
+        fuelingCost,
+        totalCost,
+        kmDriven,
+        avgEfficiency,
+        costPerKm,
+      } as MonthlyTrendPoint;
+    });
+  } catch (err) {
+    console.error("[Report] getMonthlyCostsTrend error:", err);
+    return [];
+  }
+}

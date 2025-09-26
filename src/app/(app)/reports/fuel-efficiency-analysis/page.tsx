@@ -26,7 +26,7 @@ import { useState, useEffect } from "react";
 import type { Vehicle } from "@/types";
 import Image from "next/image";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
 
 export default function FuelEfficiencyAnalysisPage() {
   const [efficiencyData, setEfficiencyData] = useState<FuelEfficiencyStats[]>([]);
@@ -255,28 +255,44 @@ export default function FuelEfficiencyAnalysisPage() {
 
       <Card className="mt-6 shadow-lg printable-area">
         <CardHeader>
-          <CardTitle>Gráfico de Tendencias de Eficiencia (Marcador de posición)</CardTitle>
-          <CardDescription>Representación visual de la eficiencia a lo largo del tiempo o por vehículo. Funcionalidad pendiente.</CardDescription>
+          <CardTitle>Comparación de Eficiencia por Vehículo</CardTitle>
+          <CardDescription>Promedio, mínimo y máximo de eficiencia por vehículo.</CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer
             config={{
-              avg: { label: "Promedio", color: "#2563eb" },
-              min: { label: "Mínimo", color: "#ef4444" },
-              max: { label: "Máximo", color: "#22c55e" },
+              avgEfficiency: { label: "Eficiencia Prom. (km/gal)", color: "hsl(var(--chart-1))" },
+              minEfficiency: { label: "Mín (km/gal)", color: "hsl(var(--chart-2))" },
+              maxEfficiency: { label: "Máx (km/gal)", color: "hsl(var(--chart-3))" },
             }}
-            className="h-64"
+            className="h-72 lg:h-80"
           >
-            <BarChart data={efficiencyData.map(d => ({ label: d.plateNumber, avg: d.averageEfficiency ?? 0, min: d.minEfficiency ?? 0, max: d.maxEfficiency ?? 0 }))}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="label" tickLine={false} axisLine={false} />
-              <YAxis />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar dataKey="avg" fill="var(--color-avg)" />
-              <Bar dataKey="min" fill="var(--color-min)" />
-              <Bar dataKey="max" fill="var(--color-max)" />
-            </BarChart>
+            <ResponsiveContainer>
+              <AreaChart data={efficiencyData.map(d => ({ name: d.plateNumber, avgEfficiency: d.averageEfficiency ?? 0, minEfficiency: d.minEfficiency ?? 0, maxEfficiency: d.maxEfficiency ?? 0 }))} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
+                <defs>
+                  <linearGradient id="grad-avg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="grad-min" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="grad-max" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(var(--chart-3))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-3))" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Area type="monotone" dataKey="avgEfficiency" stroke="hsl(var(--chart-1))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-avg)" />
+                <Area type="monotone" dataKey="minEfficiency" stroke="hsl(var(--chart-2))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-min)" />
+                <Area type="monotone" dataKey="maxEfficiency" stroke="hsl(var(--chart-3))" strokeWidth={2.5} fillOpacity={1} fill="url(#grad-max)" />
+              </AreaChart>
+            </ResponsiveContainer>
           </ChartContainer>
         </CardContent>
       </Card>

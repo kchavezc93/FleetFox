@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { createVehicle } from "@/lib/actions/vehicle-actions";
 import { Card, CardContent } from "@/components/ui/card";
+import { requirePermission } from "@/lib/authz";
 
-export default function NewVehiclePage() {
+export default async function NewVehiclePage() {
+  await requirePermission('/vehicles');
   return (
     <>
       <PageHeader

@@ -1,8 +1,8 @@
 "use client";
 
 import React from "react";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from "@/components/ui/chart";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip, Legend } from "recharts";
 
 type Props = {
   maintenance: number;
@@ -14,8 +14,8 @@ type Props = {
 export default function MonthlyCostChart({ maintenance, fueling, currency = "NIO", locale = "es-NI" }: Props) {
   const data = React.useMemo(
     () => [
-      { name: "Mantenimiento", value: Number(maintenance) || 0, key: "maintenance", fill: "var(--color-maintenance)" },
-      { name: "Combustible", value: Number(fueling) || 0, key: "fueling", fill: "var(--color-fueling)" },
+      { name: "Mantenimiento", maintenance: Number(maintenance) || 0 },
+      { name: "Combustible", fueling: Number(fueling) || 0 },
     ],
     [maintenance, fueling]
   );
@@ -32,13 +32,18 @@ export default function MonthlyCostChart({ maintenance, fueling, currency = "NIO
       className="w-full h-64"
     >
       <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 12 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="name" tickLine={false} axisLine={false} />
-          <YAxis tickLine={false} axisLine={false} tickFormatter={(v) => nf.format(Number(v)).replace(/^C\$/, "C$")} />
-          <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any) => nf.format(Number(value))} />
-          <Bar dataKey="value" radius={[4, 4, 0, 0]} />
-        </BarChart>
+          <YAxis width={84} tickMargin={8} tickLine={false} axisLine={false} tickFormatter={(v) => nf.format(Number(v))} />
+          <ChartTooltip content={<ChartTooltipContent />} formatter={(value: any, name: any) => {
+            const label = name === "maintenance" ? "Mantenimiento" : name === "fueling" ? "Combustible" : String(name);
+            return `${label}: ${nf.format(Number(value))}`;
+          }} />
+          <Legend content={<ChartLegendContent />} />
+          <Line type="monotone" dataKey="maintenance" stroke="hsl(var(--chart-2))" strokeWidth={2} dot={false} />
+          <Line type="monotone" dataKey="fueling" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} />
+        </LineChart>
       </ResponsiveContainer>
     </ChartContainer>
   );

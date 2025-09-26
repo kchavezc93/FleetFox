@@ -208,6 +208,27 @@ export async function getCurrentUser(): Promise<{ id: string; username: string; 
   }
 }
 
+// Fetch role and permissions array for the current user (server-only)
+export async function getCurrentUserPermissions(): Promise<{ role: 'Admin'|'Standard'; permissions: string[] } | null> {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return null;
+    const dbClient = await getDbClient();
+    if (dbClient?.type !== 'SQLServer' || !(dbClient as any).pool) return { role: user.role, permissions: [] };
+    const pool = (dbClient as any).pool as sql.ConnectionPool;
+    const req = pool.request();
+    req.input('id', sql.NVarChar(50), user.id);
+    const res = await req.query('SELECT role, permissions FROM users WHERE id = @id');
+    if (!res.recordset.length) return { role: user.role, permissions: [] };
+    const row = res.recordset[0];
+    let permissions: string[] = [];
+    try { permissions = row.permissions ? JSON.parse(row.permissions) : []; } catch { permissions = []; }
+    return { role: (row.role || user.role) as 'Admin'|'Standard', permissions: Array.isArray(permissions) ? permissions : [] };
+  } catch {
+    return null;
+  }
+}
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Contraseña actual requerida'),
   newPassword: z.string().min(6, 'La nueva contraseña debe tener al menos 6 caracteres'),

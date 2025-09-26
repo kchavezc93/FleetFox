@@ -4,8 +4,10 @@ import { Wrench } from "lucide-react";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { createMaintenanceLog } from "@/lib/actions/maintenance-actions";
 import { Card, CardContent } from "@/components/ui/card";
+import { requirePermission } from "@/lib/authz";
 
 export default async function NewMaintenancePage() {
+  await requirePermission('/maintenance');
   const vehicles = await getVehicles();
   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
 
