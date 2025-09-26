@@ -19,9 +19,14 @@ type Props = React.ComponentProps<typeof Button> & {
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  successToastTitle?: string;
+  successToastDescription?: string;
 };
 
-export function ConfirmSubmitButton({ confirmMessage, children, title = "Confirmar acción", confirmLabel = "Confirmar", cancelLabel = "Cancelar", ...rest }: Props) {
+import { useToast } from "@/hooks/use-toast";
+
+export function ConfirmSubmitButton({ confirmMessage, children, title = "Confirmar acción", confirmLabel = "Confirmar", cancelLabel = "Cancelar", successToastTitle, successToastDescription, ...rest }: Props) {
+  const { toast } = useToast();
   const formRef = React.useRef<HTMLFormElement | null>(null);
   // We render a hidden submit to hook the actual form submission
   return (
@@ -42,6 +47,9 @@ export function ConfirmSubmitButton({ confirmMessage, children, title = "Confirm
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
+              if (successToastTitle) {
+                toast({ title: successToastTitle, description: successToastDescription });
+              }
               // Find nearest form and submit
               const target = (e.target as HTMLElement) || null;
               const form = target?.closest("form") as HTMLFormElement | null;

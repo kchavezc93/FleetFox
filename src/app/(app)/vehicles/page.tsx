@@ -27,6 +27,7 @@ import { getVehicles, deleteVehicle, activateVehicle } from "@/lib/actions/vehic
 import { revalidatePath } from "next/cache";
 import { VehiclesExportButtons } from "@/components/vehicles-export";
 import { ConfirmSubmitMenuItem } from "@/components/confirm-submit-menu-item";
+import { SubmitMenuItem } from "@/components/submit-menu-item";
 import VehicleActiveToggleCell from "@/components/vehicles/active-toggle-cell";
 
 
@@ -172,11 +173,14 @@ export default async function VehiclesPage() {
                             await activateVehicle(vehicle.id);
                             revalidatePath("/vehicles");
                           }} className="w-full">
-                            <DropdownMenuItem asChild>
-                              <button type="submit" className="w-full text-left">
+                            <SubmitMenuItem
+                              successToastTitle="Vehículo activado"
+                              successToastDescription="El vehículo fue marcado como Activo."
+                            >
+                              <span className="flex items-center">
                                 <PlayCircle className="mr-2 h-4 w-4" /> {vehicle.status === "Inactivo" ? "Activar Vehículo" : "Marcar como Activo"}
-                              </button>
-                            </DropdownMenuItem>
+                              </span>
+                            </SubmitMenuItem>
                           </form>
                         ) : (
                           <form action={async () => {
@@ -184,7 +188,14 @@ export default async function VehiclesPage() {
                             await deleteVehicle(vehicle.id);
                             revalidatePath("/vehicles");
                           }} className="w-full">
-                            <ConfirmSubmitMenuItem confirmMessage="¿Marcar este vehículo como Inactivo?">
+                            <ConfirmSubmitMenuItem
+                              confirmMessage="¿Marcar este vehículo como Inactivo?"
+                              title="Cambiar estado"
+                              confirmLabel="Confirmar"
+                              cancelLabel="Cancelar"
+                              successToastTitle="Vehículo marcado como inactivo"
+                              successToastDescription="El vehículo fue marcado como Inactivo."
+                            >
                               <span className="flex items-center">
                                 <Trash2 className="mr-2 h-4 w-4" /> Marcar como Inactivo
                               </span>

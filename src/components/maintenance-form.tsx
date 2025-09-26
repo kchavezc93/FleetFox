@@ -54,6 +54,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [source, setSource] = useState<string | null>(null);
   
   // Local state to manage the list of attachments displayed in the UI
   const [currentAttachments, setCurrentAttachments] = useState<DisplayableAttachment[]>([]);
@@ -90,6 +91,40 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
 
   useEffect(() => {
     setIsClient(true);
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const src = sp.get('source');
+      if (src === 'upcoming') {
+        setSource('upcoming');
+        toast({ title: 'Datos prellenados', description: 'Origen: Próximo Mantenimiento. Verifique y complete los detalles.' });
+      }
+      // Prefill from query params if provided
+      const qpVehicleId = sp.get('vehicleId') || undefined;
+      const qpExecutionDate = sp.get('executionDate') || undefined;
+      const qpMileage = sp.get('mileageAtService');
+      const qpNextDate = sp.get('nextDate') || undefined;
+      const qpNextMileage = sp.get('nextMileage');
+      if (!maintenanceLog) {
+        if (qpVehicleId) form.setValue('vehicleId', qpVehicleId, { shouldDirty: true });
+        form.setValue('maintenanceType', 'Preventivo', { shouldDirty: true });
+        if (qpExecutionDate) {
+          const d = new Date(qpExecutionDate + 'T00:00:00');
+          if (!isNaN(d.getTime())) form.setValue('executionDate', d, { shouldDirty: true });
+        }
+        if (qpMileage) {
+          const n = parseInt(qpMileage, 10);
+          if (!isNaN(n)) form.setValue('mileageAtService', n, { shouldDirty: true });
+        }
+        if (qpNextDate) {
+          const d2 = new Date(qpNextDate + 'T00:00:00');
+          if (!isNaN(d2.getTime())) form.setValue('nextMaintenanceDateScheduled', d2, { shouldDirty: true });
+        }
+        if (qpNextMileage) {
+          const n2 = parseInt(qpNextMileage, 10);
+          if (!isNaN(n2)) form.setValue('nextMaintenanceMileageScheduled', n2, { shouldDirty: true });
+        }
+      }
+    }
     if (maintenanceLog) {
       form.reset({
         vehicleId: maintenanceLog.vehicleId,
@@ -123,6 +158,16 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
       setCurrentAttachments([]);
     }
   }, [maintenanceLog, form, setIsClient]);
+
+  // Lock maintenance type to Preventivo when source=upcoming
+  useEffect(() => {
+    if (source === 'upcoming') {
+      const current = form.getValues('maintenanceType');
+      if (current !== 'Preventivo') {
+        form.setValue('maintenanceType', 'Preventivo', { shouldDirty: true });
+      }
+    }
+  }, [source, form]);
 
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,8 +243,9 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
       };
 
       const result = await onSubmitAction(payload);
+      const isEdit = Boolean(maintenanceLog?.id);
       toast({
-        title: "Éxito",
+        title: isEdit ? "Registro actualizado" : "Registro creado",
         description: result.message,
       });
       if (result.log && !result.errors) {
@@ -224,6 +270,11 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        {source === 'upcoming' && (
+          <div className="rounded-md border bg-muted/40 p-3 text-sm">
+            Origen: <span className="font-medium">Próximo Mantenimiento</span>. Algunos campos se han prellenado.
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField<MaintenanceLogSchema, "vehicleId">
             control={form.control}
@@ -255,7 +306,7 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Tipo de Mantenimiento *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select onValueChange={field.onChange} value={field.value} disabled={source === 'upcoming'}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Seleccione el tipo" />
@@ -266,6 +317,9 @@ export function MaintenanceForm({ vehicles, onSubmitAction, maintenanceLog }: Ma
                     <SelectItem value="Correctivo">Correctivo</SelectItem>
                   </SelectContent>
                 </Select>
+                {source === 'upcoming' && (
+                  <FormDescription>Fijado como Preventivo por provenir de Próximo Mantenimiento.</FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}

@@ -26,12 +26,26 @@ export default function FuelingFilters({ vehicles, selectedVehicleId, from, to }
   const [vehicleId, setVehicleId] = React.useState<string>(selectedVehicleId ?? "all");
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(() => {
     if (from || to) {
-      const f = from ? new Date(from + "T00:00:00Z") : undefined;
-      const t = to ? new Date(to + "T00:00:00Z") : undefined;
+      const parseLocal = (s: string) => {
+        const [yy, mm, dd] = s.split("-").map(n => parseInt(n, 10));
+        return new Date(yy, (mm || 1) - 1, dd || 1);
+      };
+      const f = from ? parseLocal(from) : undefined;
+      const t = to ? parseLocal(to) : undefined;
       return { from: f, to: t };
     }
-    return undefined;
+    // Default to "Este mes"
+    const today = new Date();
+    return { from: startOfMonth(today), to: endOfMonth(today) };
   });
+
+  // On first mount, if no from/to were provided via props, reflect default range in URL
+  React.useEffect(() => {
+    if (!from && !to && dateRange?.from && dateRange?.to) {
+      pushWith(vehicleId, dateRange);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pushWith = React.useCallback((vid: string, range?: DateRange) => {
     const params = new URLSearchParams();

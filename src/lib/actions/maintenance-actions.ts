@@ -480,33 +480,26 @@ export async function deleteMaintenanceLog(id: string) {
       const result = await deleteLogRequest.query('DELETE FROM maintenance_logs WHERE id = @logIdToDelete;');
       
       await transaction.commit();
-
-      if (result.rowsAffected[0] === 0) {
-        // No se encontró el log principal.
-        console.warn(`[Delete Maintenance Log] Maintenance log ID: ${id} no encontrado para eliminar, o ya estaba eliminado.`);
-        // PRODUCCIÓN: logger.warn({ action: 'deleteMaintenanceLog', logId: id, reason: 'Log not found for deletion or already deleted' });
-      } else {
-        // PRODUCCIÓN: logger.info({ action: 'deleteMaintenanceLog', logId: id, status: 'success' });
-      }
+      revalidatePath('/maintenance');
+      return { message: 'Registro de mantenimiento eliminado.', success: true };
     } catch (error) {
 
             await transaction.rollback();
 
       // PRODUCCIÓN: logger.error({ action: 'deleteMaintenanceLog', logId: id, error: (error as Error).message, stack: (error as Error).stack }, "Error deleting maintenance log");
       console.error(`[SQL Server Error] Error al eliminar registro de mantenimiento ${id}:`, error);
-      throw new Error(`Error al eliminar registro de mantenimiento: ${(error as Error).message}`);
+      return { message: `Error al eliminar registro de mantenimiento: ${(error as Error).message}`, success: false };
     }
   } else {
     console.warn(`[Delete Maintenance Log] La eliminación de registros de mantenimiento no está implementada para el tipo de BD: ${dbClient.type}.`);
     // PRODUCCIÓN: logger.warn({ action: 'deleteMaintenanceLog', logId: id, dbType: dbClient.type, reason: 'Unsupported DB type for deletion' });
-    throw new Error(`Eliminación no soportada para el tipo de BD: ${dbClient.type}`);
+    return { message: `Eliminación no soportada para el tipo de BD: ${dbClient.type}` , success: false };
   }
-  
-  
-  console.log(`[Delete Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro ID: ${id} no eliminado.`);
-  revalidatePath("/maintenance");
-  revalidatePath(`/maintenance/${id}`); 
-  redirect("/maintenance?message=delete_sql_needed_for_maintenance_log");
+  // Fallback no alcanzable si SQL Server se maneja arriba; mantener retorno explícito
+  // console.log(`[Delete Maintenance Log] Lógica SQL pendiente para DB tipo: ${dbClient.type}. Registro ID: ${id} no eliminado.`);
+  // revalidatePath("/maintenance");
+  // revalidatePath(`/maintenance/${id}`); 
+  // redirect("/maintenance?message=delete_sql_needed_for_maintenance_log");
 }
 
 

@@ -75,7 +75,6 @@ sqlcmd -S .\SQLEXPRESS -d FleetFox -E -b -i "docs\db\fleetfox_schema.sql"
 
 Notas
 - El script es idempotente: puedes ejecutarlo múltiples veces sin duplicar objetos.
-- Incluye la columna `settings.voucher_max_per_fueling` y si `settings` está vacío, inserta una fila inicial con `voucher_max_per_fueling = 2`.
 
 ### Fallback local para configuración de BD
 
@@ -316,12 +315,6 @@ docker compose up -d
 - Revalidación: Acciones del servidor usan `revalidatePath` tras escrituras para refrescar UI.
 - Validación: Formularios validados con Zod y `react-hook-form`.
 - Imágenes remotas: Permitidas desde `placehold.co` en `next.config.ts`.
-
-## Mantenimiento y limpieza (Sep 2025)
-
-- Se eliminaron dependencias no utilizadas para reducir superficie de ataque y tiempo de instalación: `firebase`, `@tanstack-query-firebase/react`, `dotenv`, y varios paquetes de Radix no empleados (menubar, progress, slider, tabs).
-- Se reemplazaron los wrappers UI no usados por stubs vacíos para evitar roturas si algún import quedaba colgando: `src/components/ui/{menubar,progress,slider,tabs}.tsx`.
-- Si en el futuro se necesitan, pueden restaurarse fácilmente desde shadcn/ui.
 
 ## Roadmap (estado actual)
 

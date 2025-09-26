@@ -83,7 +83,12 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
               </Button>
             </Link>
             <form action={handleDeleteAction}>
-              <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este registro de mantenimiento?">
+              <ConfirmSubmitButton
+                variant="destructive"
+                confirmMessage="¿Eliminar este registro de mantenimiento?"
+                successToastTitle="Registro eliminado"
+                successToastDescription="El registro de mantenimiento fue eliminado correctamente."
+              >
                 <Trash2 className="mr-2 h-4 w-4" /> Eliminar
               </ConfirmSubmitButton>
             </form>

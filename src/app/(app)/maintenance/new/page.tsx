@@ -5,12 +5,13 @@ import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { createMaintenanceLog } from "@/lib/actions/maintenance-actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { requirePermission } from "@/lib/authz";
+import { redirect } from "next/navigation";
+import type { PageProps } from "next";
 
-export default async function NewMaintenancePage() {
+export default async function NewMaintenancePage(_props: PageProps) {
   await requirePermission('/maintenance');
   const vehicles = await getVehicles();
   const activeVehicles = vehicles.filter(v => v.status === 'Activo' || v.status === 'En Taller');
-
 
   return (
     <>

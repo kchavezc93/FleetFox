@@ -12,9 +12,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
+import { getMaintenanceLogs, getMaintenanceLogsFiltered } from "@/lib/actions/maintenance-actions";
 import { requirePermission } from "@/lib/authz";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { formatDateDDMMYYYY } from "@/lib/utils";
 import { formatNumber, formatCurrency } from "@/lib/currency";
 import { es } from "date-fns/locale";
@@ -25,10 +25,29 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MaintenanceExportButtons } from "@/components/maintenance-export";
+import { ConfirmSubmitMenuItem } from "@/components/confirm-submit-menu-item";
+import { deleteMaintenanceLog } from "@/lib/actions/maintenance-actions";
+import MaintenanceFilters from "@/components/maintenance-filters";
+import { getVehicles } from "@/lib/actions/vehicle-actions";
 
-export default async function MaintenancePage() {
+export default async function MaintenancePage({ searchParams }: { searchParams?: Promise<{ vehicleId?: string; from?: string; to?: string }> }) {
   await requirePermission('/maintenance');
-  const logs = await getMaintenanceLogs();
+  const sp = searchParams ? await searchParams : {};
+  const vehicleId = sp?.vehicleId;
+  const from = sp?.from;
+  const to = sp?.to;
+
+  // Default date range to current month when not provided
+  const today = new Date();
+  const defaultFrom = format(startOfMonth(today), 'yyyy-MM-dd');
+  const defaultTo = format(endOfMonth(today), 'yyyy-MM-dd');
+  const effFrom = from ?? (to ? undefined : defaultFrom);
+  const effTo = to ?? (from ? undefined : defaultTo);
+
+  const [logs, vehicles] = await Promise.all([
+    getMaintenanceLogsFiltered({ vehicleId, from: effFrom, to: effTo }),
+    getVehicles(),
+  ]);
 
   return (
     <>
@@ -37,7 +56,8 @@ export default async function MaintenancePage() {
         description="Realiza un seguimiento de todo el mantenimiento preventivo y correctivo de tu flota."
         icon={Wrench}
         actions={
-           <>
+           <div className="flex items-center gap-2">
+            <MaintenanceFilters vehicles={vehicles} selectedVehicleId={vehicleId} from={effFrom} to={effTo} />
             <MaintenanceExportButtons
               rows={logs.map(l => ({
                 vehiclePlateNumber: l.vehiclePlateNumber || "",
@@ -56,7 +76,7 @@ export default async function MaintenancePage() {
                 Registrar Mantenimiento
               </Button>
             </Link>
-          </>
+          </div>
         }
       />
 
@@ -105,7 +125,7 @@ export default async function MaintenancePage() {
                   <TableCell>{formatNumber(log.mileageAtService)} km</TableCell>
                   <TableCell>{formatCurrency(log.cost)}</TableCell>
                   <TableCell className="text-right">
-                     <DropdownMenu>
+                    <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0">
                           <span className="sr-only">Abrir menú</span>
@@ -116,7 +136,21 @@ export default async function MaintenancePage() {
                         <DropdownMenuItem asChild>
                           <Link href={`/maintenance/${log.id}`}>Ver Detalles</Link>
                         </DropdownMenuItem>
-                        {/* <DropdownMenuItem>Editar Registro</DropdownMenuItem> */}
+                        <DropdownMenuItem asChild>
+                          <Link href={`/maintenance/${log.id}/edit`}>Editar</Link>
+                        </DropdownMenuItem>
+                        <form action={async () => { "use server"; await deleteMaintenanceLog(log.id); }}>
+                          <ConfirmSubmitMenuItem
+                            title="Eliminar registro"
+                            confirmLabel="Eliminar"
+                            cancelLabel="Cancelar"
+                            confirmMessage="¿Eliminar este registro de mantenimiento? Esta acción no se puede deshacer."
+                            successToastTitle="Registro eliminado"
+                            successToastDescription="El registro de mantenimiento fue eliminado correctamente."
+                          >
+                            Eliminar
+                          </ConfirmSubmitMenuItem>
+                        </form>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

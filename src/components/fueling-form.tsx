@@ -204,8 +204,9 @@ export function FuelingForm({ vehicles, onSubmitAction, initial, submitLabel, re
         formDataForAction.vouchersToRemove = toRemoveIds;
       }
       const result = await onSubmitAction(formDataForAction);
+      const isEdit = Boolean(initial?.id);
       toast({
-        title: "Éxito",
+        title: isEdit ? "Registro actualizado" : "Registro creado",
         description: result.message,
       });
       if (!result.errors) {

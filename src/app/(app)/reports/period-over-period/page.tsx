@@ -3,7 +3,7 @@
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -14,13 +14,14 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { DateRange } from "react-day-picker";
 import { es } from "date-fns/locale";
 import { format, startOfMonth, endOfMonth, subDays, subMonths, startOfYear } from "date-fns";
-import { TrendingUp, CalendarDays, FileDown, Printer } from "lucide-react";
+import { TrendingUp, CalendarDays, FileDown, Printer, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import type { Vehicle } from "@/types";
 import type { PeriodOverPeriodSummary, PeriodOverPeriodRow } from "@/lib/actions/report-actions";
 import { useEffect, useMemo, useState } from "react";
 import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis } from "recharts";
 import { formatCurrency as fmtCurrency, formatNumber } from "@/lib/currency";
+import { VehicleMultiSelect } from "@/components/vehicles/vehicle-multi-select";
 
 function formatPct(p: number | null | undefined) {
   if (p == null) return "—";
@@ -32,7 +33,7 @@ const formatCurrency = (n: number) => fmtCurrency(Number(n) || 0);
 
 export default function PeriodOverPeriodReportPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -82,13 +83,65 @@ export default function PeriodOverPeriodReportPage() {
           const v = await resV.json();
           setVehicles(v);
         }
-        const params = new URLSearchParams();
-        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
-        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
-        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
-        const res = await fetch(`/api/reports/period-over-period?${params.toString()}`, { cache: "no-store" });
-        const json: PeriodOverPeriodSummary = await res.json();
-        setData(json);
+
+        const baseParams = new URLSearchParams();
+        if (dateRange?.from) baseParams.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) baseParams.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+
+        if (selectedVehicleIds.length === 0) {
+          // All vehicles (server aggregates)
+          const res = await fetch(`/api/reports/period-over-period?${baseParams.toString()}`, { cache: "no-store" });
+          const json: PeriodOverPeriodSummary = await res.json();
+          setData(json);
+        } else if (selectedVehicleIds.length === 1) {
+          // Single vehicle passthrough
+          const params = new URLSearchParams(baseParams);
+          params.set("vehicleId", selectedVehicleIds[0]);
+          const res = await fetch(`/api/reports/period-over-period?${params.toString()}`, { cache: "no-store" });
+          const json: PeriodOverPeriodSummary = await res.json();
+          setData(json);
+        } else {
+          // Multi-select: fetch per vehicle and aggregate rows; compute totals from rows
+          const results: PeriodOverPeriodSummary[] = await Promise.all(
+            selectedVehicleIds.map(async (vid) => {
+              const params = new URLSearchParams(baseParams);
+              params.set("vehicleId", vid);
+              const r = await fetch(`/api/reports/period-over-period?${params.toString()}`, { cache: "no-store" });
+              return r.json();
+            })
+          );
+          const rows = results.flatMap(r => r.rows || []);
+          const acc = rows.reduce((a, r) => {
+            a.currentFuelCost += r.currentFuelCost;
+            a.currentMaintenanceCost += r.currentMaintenanceCost;
+            a.currentOverallCost += r.currentOverallCost;
+            a.currentGallons += r.currentGallons;
+            a.prevFuelCost += r.prevFuelCost;
+            a.prevMaintenanceCost += r.prevMaintenanceCost;
+            a.prevOverallCost += r.prevOverallCost;
+            a.prevGallons += r.prevGallons;
+            a.deltaFuelCost += r.deltaFuelCost;
+            a.deltaMaintenanceCost += r.deltaMaintenanceCost;
+            a.deltaOverallCost += r.deltaOverallCost;
+            a.deltaGallons += r.deltaGallons;
+            return a;
+          }, {
+            currentFuelCost: 0, currentMaintenanceCost: 0, currentOverallCost: 0, currentGallons: 0,
+            prevFuelCost: 0, prevMaintenanceCost: 0, prevOverallCost: 0, prevGallons: 0,
+            deltaFuelCost: 0, deltaMaintenanceCost: 0, deltaOverallCost: 0, deltaGallons: 0,
+            pctFuelCost: null as number | null, pctMaintenanceCost: null as number | null, pctOverallCost: null as number | null, pctGallons: null as number | null,
+          });
+          const pct = (cur: number, prev: number) => (prev === 0 ? null : (cur / prev) - 1);
+          const totals = {
+            ...acc,
+            pctFuelCost: pct(acc.currentFuelCost, acc.prevFuelCost),
+            pctMaintenanceCost: pct(acc.currentMaintenanceCost, acc.prevMaintenanceCost),
+            pctOverallCost: pct(acc.currentOverallCost, acc.prevOverallCost),
+            pctGallons: pct(acc.currentGallons, acc.prevGallons),
+          };
+          const meta = results[0]?.meta ?? { startDate: null, endDate: null, prevStartDate: null, prevEndDate: null };
+          setData({ rows, totals, meta });
+        }
       } catch (e) {
         console.error("Error loading PoP report", e);
         setData({ rows: [], totals: {
@@ -102,7 +155,7 @@ export default function PeriodOverPeriodReportPage() {
       }
     }
     load();
-  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
+  }, [selectedVehicleIds, dateRange?.from, dateRange?.to]);
 
   const rows: PeriodOverPeriodRow[] = useMemo(() => data?.rows ?? [], [data]);
   // Client-side quick search by vehicle plate or brand/model
@@ -211,80 +264,76 @@ export default function PeriodOverPeriodReportPage() {
         title="Análisis Período vs Período"
         description="Compara costos y consumo del período seleccionado contra el período anterior equivalente."
         icon={TrendingUp}
-        actions={
-          <div className="page-header-actions flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <div className="min-w-[220px]">
-                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar vehículo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los vehículos</SelectItem>
-                    {vehicles.map(v => (
-                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-[220px]">
-                <Input
-                  placeholder="Buscar placa o modelo"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start">
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    defaultMonth={dateRange?.from}
-                    locale={es}
-                  />
-                </PopoverContent>
-              </Popover>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">Rangos rápidos</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <div className="hidden md:flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Compacta</span>
-              <Switch checked={compactView} onCheckedChange={setCompactView} />
-            </div>
-            <Button variant="outline" onClick={() => window.print()}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir
-            </Button>
-            <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={!rows.length}>
-              <FileDown className="mr-2 h-4 w-4" /> CSV
-            </Button>
-          </div>
-        }
       />
+
+      {/* Single-line toolbar */}
+      <div className="mb-4 flex flex-wrap md:flex-nowrap items-center gap-1.5 justify-end">
+        <VehicleMultiSelect vehicles={vehicles} selectedIds={selectedVehicleIds} onChange={setSelectedVehicleIds} buttonLabel="Vehículos" />
+        <div className="w-[220px]">
+          <Input
+            placeholder="Buscar placa o modelo"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start">
+              <CalendarDays className="mr-2 h-4 w-4" />
+              {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              numberOfMonths={2}
+              selected={dateRange}
+              onSelect={setDateRange}
+              defaultMonth={dateRange?.from}
+              locale={es}
+            />
+          </PopoverContent>
+        </Popover>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">Rangos rápidos</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Compacta</span>
+          <Switch checked={compactView} onCheckedChange={setCompactView} />
+        </div>
+        <Button variant="outline" onClick={() => window.print()}>
+          <Printer className="mr-2 h-4 w-4" /> Imprimir
+        </Button>
+        <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportCSV} disabled={!rows.length}>
+          <FileDown className="mr-2 h-4 w-4" /> CSV
+        </Button>
+      </div>
 
       {/* Nota: El gráfico de totales se renderiza después de la tabla para mantener la convención: gráficos debajo de las tablas. */}
 
       <Card className="shadow-lg printable-area">
-        <CardHeader>
-          <CardTitle className="text-2xl">Resumen</CardTitle>
+        <CardHeader className="items-start text-left">
+          <CardTitle className="text-2xl">
+            Resumen
+            {selectedVehicleIds.length === 1
+              ? (() => {
+                  const v = vehicles.find(vv => vv.id === selectedVehicleIds[0]);
+                  return v ? ` para ${v.plateNumber}` : "";
+                })()
+              : selectedVehicleIds.length === 0
+                ? " (Todos los vehículos)"
+                : ` (Vehículos seleccionados: ${selectedVehicleIds.length})`}
+          </CardTitle>
           <div className="mt-1 text-base">
             {meta?.startDate && meta?.endDate ? (
               <div className="space-y-1">
@@ -304,7 +353,7 @@ export default function PeriodOverPeriodReportPage() {
             )}
           </div>
         </CardHeader>
-        <CardContent>
+  <CardContent>
           {isLoading ? (
             <p className="text-muted-foreground">Cargando...</p>
           ) : !rows.length ? (
@@ -316,14 +365,36 @@ export default function PeriodOverPeriodReportPage() {
                 {filteredRows.map(r => (
                   <AccordionItem key={r.vehicleId} value={r.vehicleId}>
                     <AccordionTrigger className="px-4 py-3 md:px-5 md:py-3">
-                      <div className="grid w-full grid-cols-5 items-center gap-3 text-left text-sm md:text-base">
+                      <div className="grid w-full grid-cols-6 items-center gap-3 text-left text-sm md:text-base">
                         <div className="col-span-2">
                           <div className="font-semibold leading-tight">{r.plateNumber}</div>
                           <div className="text-xs md:text-sm text-muted-foreground leading-tight">{r.brandModel}</div>
                         </div>
-                        <div className="text-right px-2 md:px-4">{formatCurrency(r.prevOverallCost)}</div>
-                        <div className="text-right px-2 md:px-4">{formatCurrency(r.currentOverallCost)}</div>
-                        <div className={`text-right px-2 md:px-4 ${r.deltaOverallCost > 0 ? 'text-red-600' : r.deltaOverallCost < 0 ? 'text-green-600' : ''}`}>{formatCurrency(r.deltaOverallCost)}</div>
+                        <div className="text-right px-2 md:px-4">
+                          <div className="text-[10px] md:text-xs text-muted-foreground">Total Ant.</div>
+                          <div className="font-medium">{formatCurrency(r.prevOverallCost)}</div>
+                        </div>
+                        <div className="text-right px-2 md:px-4">
+                          <div className="text-[10px] md:text-xs text-muted-foreground">Total Act.</div>
+                          <div className="font-medium">{formatCurrency(r.currentOverallCost)}</div>
+                        </div>
+                        <div className={`text-right px-2 md:px-4 ${r.deltaOverallCost > 0 ? 'text-red-600' : r.deltaOverallCost < 0 ? 'text-green-600' : ''}`}>
+                          <div className="text-[10px] md:text-xs text-muted-foreground">Δ Total</div>
+                          <div className="font-medium">{formatCurrency(r.deltaOverallCost)}</div>
+                        </div>
+                        <div className={`text-right px-2 md:px-4 ${r.pctOverallCost != null ? (r.pctOverallCost > 0 ? 'text-red-600' : r.pctOverallCost < 0 ? 'text-green-600' : '') : ''}`}>
+                          <div className="text-[10px] md:text-xs text-muted-foreground">% Total</div>
+                          <div className="font-medium inline-flex items-center justify-end gap-1">
+                            {r.pctOverallCost == null ? null : r.pctOverallCost > 0 ? (
+                              <ArrowUpRight className="h-3.5 w-3.5" />
+                            ) : r.pctOverallCost < 0 ? (
+                              <ArrowDownRight className="h-3.5 w-3.5" />
+                            ) : (
+                              <span className="inline-block h-3.5 w-3.5" />
+                            )}
+                            <span>{formatPct(r.pctOverallCost)}</span>
+                          </div>
+                        </div>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent>

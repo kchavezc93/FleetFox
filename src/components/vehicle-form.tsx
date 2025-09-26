@@ -94,8 +94,9 @@ export function VehicleForm({ vehicle, onSubmitAction }: VehicleFormProps) {
         nextPreventiveMaintenanceDate: data.nextPreventiveMaintenanceDate, 
       };
       const result = await onSubmitAction(formDataForAction);
+      const isEdit = Boolean(vehicle?.id);
       toast({
-        title: "Éxito",
+        title: isEdit ? "Vehículo actualizado" : "Vehículo creado",
         description: result.message,
       });
       if (result.vehicle && !result.errors) {

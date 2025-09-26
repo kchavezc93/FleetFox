@@ -165,68 +165,62 @@ export default function MaintenanceCostsReportPage() {
         title="Informe de Costos de Mantenimiento"
         description="Analiza los gastos de mantenimiento por vehículo y tipo."
         icon={Wrench}
-        actions={
-          <div className="page-header-actions flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <div className="min-w-[220px]">
-                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar vehículo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los vehículos</SelectItem>
-                    {vehicles.map(v => (
-                      <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start">
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    defaultMonth={dateRange?.from}
-                    locale={es}
-                  />
-                </PopoverContent>
-              </Popover>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">Rangos rápidos</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-             <Button variant="outline" onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleExportCSV} disabled={summaries.length === 0}>
-                <FileDown className="mr-2 h-4 w-4" /> CSV
-              </Button>
-              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={summaries.length === 0}>
-                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
-              </Button>
-            </div>
-          </div>
-        }
       />
+      <div className="mb-4 flex flex-wrap md:flex-nowrap items-center gap-1.5 justify-end">
+        <div className="min-w-[220px]">
+          <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleccionar vehículo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los vehículos</SelectItem>
+              {vehicles.map(v => (
+                <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start">
+              <CalendarDays className="mr-2 h-4 w-4" />
+              {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              numberOfMonths={2}
+              selected={dateRange}
+              onSelect={setDateRange}
+              defaultMonth={dateRange?.from}
+              locale={es}
+            />
+          </PopoverContent>
+        </Popover>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">Rangos rápidos</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant="outline" onClick={handlePrint}>
+          <Printer className="mr-2 h-4 w-4" /> Imprimir
+        </Button>
+        <Button variant="outline" onClick={handleExportCSV} disabled={summaries.length === 0}>
+          <FileDown className="mr-2 h-4 w-4" /> CSV
+        </Button>
+        <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={summaries.length === 0}>
+          <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+        </Button>
+      </div>
       <Card className="shadow-lg printable-area">
         <CardHeader>
           <CardTitle className="text-2xl">Resumen por Vehículo</CardTitle>

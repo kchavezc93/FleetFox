@@ -59,7 +59,13 @@ export function VoucherGallery({ vouchers, fuelingLogId }: VoucherGalleryProps) 
                     }
                   }}
                 >
-                  <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este voucher?" className="h-6 px-2 py-0 text-xs">
+                  <ConfirmSubmitButton
+                    variant="destructive"
+                    confirmMessage="¿Eliminar este voucher?"
+                    successToastTitle="Voucher eliminado"
+                    successToastDescription="El voucher fue eliminado correctamente."
+                    className="h-6 px-2 py-0 text-xs"
+                  >
                     Eliminar
                   </ConfirmSubmitButton>
                 </form>

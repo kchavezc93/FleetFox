@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { getFuelingLogs, getFuelingLogsFiltered, deleteFuelingLog } from "@/lib/actions/fueling-actions";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 import { formatDateDDMMYYYY } from "@/lib/utils";
 import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { FuelingExportButtons } from "@/components/fueling-export";
@@ -38,8 +38,16 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
   const vehicleId = sp?.vehicleId;
   const from = sp?.from;
   const to = sp?.to;
+
+  // Default date range to current month when not provided
+  const today = new Date();
+  const defaultFrom = format(startOfMonth(today), 'yyyy-MM-dd');
+  const defaultTo = format(endOfMonth(today), 'yyyy-MM-dd');
+  const effFrom = from ?? (to ? undefined : defaultFrom);
+  const effTo = to ?? (from ? undefined : defaultTo);
+
   const [logs, vehicles] = await Promise.all([
-    vehicleId || from || to ? getFuelingLogsFiltered({ vehicleId, from, to }) : getFuelingLogs(),
+    getFuelingLogsFiltered({ vehicleId, from: effFrom, to: effTo }),
     getVehicles(),
   ]);
   const vehicleMap = new Map(vehicles.map(v => [v.id, `${v.plateNumber} (${v.brand} ${v.model})`]));
@@ -52,7 +60,7 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
         icon={Fuel}
         actions={
           <div className="flex items-center gap-2">
-            <FuelingFilters vehicles={vehicles} selectedVehicleId={vehicleId} from={from} to={to} />
+            <FuelingFilters vehicles={vehicles} selectedVehicleId={vehicleId} from={effFrom} to={effTo} />
             <FuelingExportButtons
               rows={logs.map(l => ({
                 plate: l.vehiclePlateNumber || vehicleMap.get(l.vehicleId) || l.vehicleId,
@@ -129,10 +137,17 @@ export default async function FuelingPage({ searchParams }: { searchParams?: Pro
                           <DropdownMenuItem>Ver Detalles</DropdownMenuItem>
                         </Link>
                         <Link href={`/fueling/${log.id}/edit`}>
-                          <DropdownMenuItem>Editar Registro</DropdownMenuItem>
+                          <DropdownMenuItem>Editar</DropdownMenuItem>
                         </Link>
                         <form action={async () => { "use server"; await deleteFuelingLog(log.id); }}>
-                          <ConfirmSubmitMenuItem confirmMessage="¿Eliminar este registro de combustible? Esta acción no se puede deshacer.">
+                          <ConfirmSubmitMenuItem
+                            title="Eliminar registro"
+                            confirmLabel="Eliminar"
+                            cancelLabel="Cancelar"
+                            confirmMessage="¿Eliminar este registro de combustible? Esta acción no se puede deshacer."
+                            successToastTitle="Registro eliminado"
+                            successToastDescription="El registro de combustible fue eliminado correctamente."
+                          >
                             Eliminar
                           </ConfirmSubmitMenuItem>
                         </form>

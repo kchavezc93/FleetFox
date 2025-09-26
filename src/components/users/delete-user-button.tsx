@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +19,7 @@ export function DeleteUserButton({
 }: {
   action: (formData: FormData) => void | Promise<void>;
 }) {
+  const { toast } = useToast();
   return (
     <form action={action}>
       <AlertDialog>
@@ -36,7 +38,11 @@ export function DeleteUserButton({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction asChild>
-              <button type="submit" className="text-red-600">
+              <button
+                type="submit"
+                className="text-red-600"
+                onClick={() => toast({ title: "Usuario eliminado", description: "El usuario fue eliminado correctamente." })}
+              >
                 Eliminar
               </button>
             </AlertDialogAction>

@@ -40,7 +40,12 @@ export default async function FuelingDetailsPage({ params }: { params: Promise<{
               <Button variant="outline">Editar</Button>
             </Link>
             <form action={async () => { "use server"; await deleteFuelingLog(log.id); }}>
-              <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este registro de combustible?">
+              <ConfirmSubmitButton
+                variant="destructive"
+                confirmMessage="¿Eliminar este registro de combustible?"
+                successToastTitle="Registro eliminado"
+                successToastDescription="El registro de combustible fue eliminado correctamente."
+              >
                 Eliminar
               </ConfirmSubmitButton>
             </form>

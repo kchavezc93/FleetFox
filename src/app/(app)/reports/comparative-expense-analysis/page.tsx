@@ -15,13 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -37,6 +31,7 @@ import MonthlyCostPerKmChart from "@/components/monthly-cost-per-km-chart";
 import MonthlyEfficiencyChart from "@/components/monthly-efficiency-chart";
 import MonthlyKmDrivenChart from "@/components/monthly-km-driven-chart";
 import { exportToXLSX, exportMultipleSheetsToXLSX } from "@/lib/export-excel";
+import { VehicleMultiSelect } from "@/components/vehicles/vehicle-multi-select";
 
 //
 
@@ -45,7 +40,7 @@ export default function ComparativeExpenseAnalysisPage() {
   const [summary, setSummary] = useState<ComparativeExpenseSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string>("all");
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
   const [selectedExpenseType, setSelectedExpenseType] = useState<string>("all");
   const [dateRange, setDateRange] = useState<DateRange | undefined>(() => {
     const today = new Date();
@@ -102,47 +97,126 @@ export default function ComparativeExpenseAnalysisPage() {
           const v = await resV.json();
           setVehicles(v);
         }
-        const params = new URLSearchParams();
-        if (dateRange?.from) params.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
-        if (dateRange?.to) params.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
-        if (selectedVehicleId !== "all") params.set("vehicleId", selectedVehicleId);
-        const res = await fetch(`/api/reports/comparative-expenses?${params.toString()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
-        const s = await res.json();
-        setSummary(s);
 
-        // Load monthly trend for the same filters (vehicle/date)
-        const trendParams = new URLSearchParams();
-        if (dateRange?.from) trendParams.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
-        if (dateRange?.to) trendParams.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
-        if (selectedVehicleId !== "all") trendParams.set("vehicleId", selectedVehicleId);
-        const resTrend = await fetch(`/api/reports/monthly-trend?${trendParams.toString()}`, { cache: "no-store" });
-        if (resTrend.ok) {
-          const tr = await resTrend.json();
-          const mapped = (tr || []);
-          setTrend(mapped.map((pt: any) => ({ label: pt.label, maintenance: Number(pt.maintenanceCost)||0, fueling: Number(pt.fuelingCost)||0 })));
-          setTrendCostPerKm(mapped.map((pt: any) => ({ label: pt.label, costPerKm: pt.costPerKm != null ? Number(pt.costPerKm) : null })));
-          setTrendEfficiency(mapped.map((pt: any) => ({ label: pt.label, avgEfficiency: pt.avgEfficiency != null ? Number(pt.avgEfficiency) : null })));
-          setTrendKmDriven(mapped.map((pt: any) => ({ label: pt.label, kmDriven: pt.kmDriven != null ? Number(pt.kmDriven) : null })));
+        // Always build date params
+        const baseParams = new URLSearchParams();
+        if (dateRange?.from) baseParams.set("startDate", format(dateRange.from, "yyyy-MM-dd"));
+        if (dateRange?.to) baseParams.set("endDate", format(dateRange.to, "yyyy-MM-dd"));
+
+        // Summary fetch and aggregation
+        if (selectedVehicleIds.length === 0) {
+          const res = await fetch(`/api/reports/comparative-expenses?${baseParams.toString()}`, { cache: "no-store" });
+          if (!res.ok) throw new Error(`Error cargando informe: ${res.status}`);
+          const s = await res.json();
+          setSummary(s);
         } else {
-          setTrend([]);
-          setTrendCostPerKm([]);
-          setTrendEfficiency([]);
-          setTrendKmDriven([]);
+          // Fetch per-vehicle and aggregate
+          const summaries = await Promise.all(
+            selectedVehicleIds.map(async (vid) => {
+              const params = new URLSearchParams(baseParams);
+              params.set("vehicleId", vid);
+              const r = await fetch(`/api/reports/comparative-expenses?${params.toString()}`, { cache: "no-store" });
+              if (!r.ok) throw new Error(`Error cargando informe vehículo ${vid}: ${r.status}`);
+              return r.json();
+            })
+          );
+          // Aggregate totals and breakdown
+          const aggregated = summaries.reduce((acc: any, s: any) => {
+            acc.totalMaintenanceCost += Number(s.totalMaintenanceCost) || 0;
+            acc.totalFuelingCost += Number(s.totalFuelingCost) || 0;
+            acc.totalOverallCost += Number(s.totalOverallCost) || 0;
+            acc.totalGallonsConsumed += Number(s.totalGallonsConsumed) || 0;
+            acc.maintenanceLogCount += Number(s.maintenanceLogCount) || 0;
+            acc.fuelingLogCount += Number(s.fuelingLogCount) || 0;
+            acc.kmDrivenInPeriod = (acc.kmDrivenInPeriod || 0) + (s.kmDrivenInPeriod || 0);
+            acc.vehicleBreakdown.push(...(s.vehicleBreakdown || []));
+            return acc;
+          }, {
+            totalMaintenanceCost: 0,
+            totalFuelingCost: 0,
+            totalOverallCost: 0,
+            totalGallonsConsumed: 0,
+            maintenanceLogCount: 0,
+            fuelingLogCount: 0,
+            kmDrivenInPeriod: 0,
+            costPerKm: null,
+            avgFuelEfficiency: null,
+            vehicleBreakdown: [] as any[],
+          });
+          aggregated.costPerKm = aggregated.kmDrivenInPeriod > 0 ? aggregated.totalOverallCost / aggregated.kmDrivenInPeriod : null;
+          aggregated.avgFuelEfficiency = aggregated.totalGallonsConsumed > 0 ? aggregated.kmDrivenInPeriod / aggregated.totalGallonsConsumed : null;
+          setSummary(aggregated);
+        }
+
+        // Monthly trend fetch and aggregation
+        if (selectedVehicleIds.length === 0) {
+          const resTrend = await fetch(`/api/reports/monthly-trend?${baseParams.toString()}`, { cache: "no-store" });
+          if (resTrend.ok) {
+            const tr = await resTrend.json();
+            const mapped = tr || [];
+            setTrend(mapped.map((pt: any) => ({ label: pt.label, maintenance: Number(pt.maintenanceCost) || 0, fueling: Number(pt.fuelingCost) || 0 })));
+            setTrendCostPerKm(mapped.map((pt: any) => ({ label: pt.label, costPerKm: pt.costPerKm != null ? Number(pt.costPerKm) : null })));
+            setTrendEfficiency(mapped.map((pt: any) => ({ label: pt.label, avgEfficiency: pt.avgEfficiency != null ? Number(pt.avgEfficiency) : null })));
+            setTrendKmDriven(mapped.map((pt: any) => ({ label: pt.label, kmDriven: pt.kmDriven != null ? Number(pt.kmDriven) : null })));
+          } else {
+            setTrend([]);
+            setTrendCostPerKm([]);
+            setTrendEfficiency([]);
+            setTrendKmDriven([]);
+          }
+        } else {
+          const trends = await Promise.all(
+            selectedVehicleIds.map(async (vid) => {
+              const params = new URLSearchParams(baseParams);
+              params.set("vehicleId", vid);
+              const r = await fetch(`/api/reports/monthly-trend?${params.toString()}`, { cache: "no-store" });
+              return r.ok ? r.json() : [];
+            })
+          );
+          // Combine by label
+          const byLabel: Record<string, { maintenance: number; fueling: number; kmDriven: number; avgEffValues: number[] }> = {};
+          for (const tr of trends) {
+            for (const pt of tr || []) {
+              const label = pt.label as string;
+              if (!byLabel[label]) byLabel[label] = { maintenance: 0, fueling: 0, kmDriven: 0, avgEffValues: [] };
+              byLabel[label].maintenance += Number(pt.maintenanceCost) || 0;
+              byLabel[label].fueling += Number(pt.fuelingCost) || 0;
+              byLabel[label].kmDriven += pt.kmDriven != null ? Number(pt.kmDriven) : 0;
+              if (pt.avgEfficiency != null) byLabel[label].avgEffValues.push(Number(pt.avgEfficiency));
+            }
+          }
+          const labels = Object.keys(byLabel);
+          labels.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+          const trendCombined = labels.map(label => ({ label, maintenance: byLabel[label].maintenance, fueling: byLabel[label].fueling }));
+          const costPerKmCombined = labels.map(label => {
+            const totalCost = byLabel[label].maintenance + byLabel[label].fueling;
+            const km = byLabel[label].kmDriven;
+            return { label, costPerKm: km > 0 ? totalCost / km : null };
+          });
+          const efficiencyCombined = labels.map(label => {
+            const vals = byLabel[label].avgEffValues;
+            const avg = vals.length ? (vals.reduce((s, v) => s + v, 0) / vals.length) : null;
+            return { label, avgEfficiency: avg };
+          });
+          const kmCombined = labels.map(label => ({ label, kmDriven: byLabel[label].kmDriven || null }));
+          setTrend(trendCombined);
+          setTrendCostPerKm(costPerKmCombined);
+          setTrendEfficiency(efficiencyCombined);
+          setTrendKmDriven(kmCombined);
         }
       } catch (error) {
         console.error("Error loading comparative summary:", error);
-  setSummary(null);
-  setTrend([]);
-  setTrendCostPerKm([]);
-  setTrendEfficiency([]);
-  setTrendKmDriven([]);
+        setSummary(null);
+        setTrend([]);
+        setTrendCostPerKm([]);
+        setTrendEfficiency([]);
+        setTrendKmDriven([]);
       } finally {
         setIsLoading(false);
       }
     }
     loadData();
-  }, [selectedVehicleId, dateRange?.from, dateRange?.to]);
+  }, [selectedVehicleIds, dateRange?.from, dateRange?.to]);
 
   const comparativeData = useMemo(() => {
     const base: ComparativeExpenseSummary = summary ?? {
@@ -157,26 +231,31 @@ export default function ComparativeExpenseAnalysisPage() {
       avgFuelEfficiency: null,
       vehicleBreakdown: [],
     };
+    // If selecting a subset of vehicles, filter breakdown to subset (summary totals are already aggregated in loadData for multi-select)
+    const subsetSet = new Set(selectedVehicleIds);
+    const baseFiltered = selectedVehicleIds.length === 0
+      ? base
+      : {
+          ...base,
+          vehicleBreakdown: base.vehicleBreakdown.filter(v => subsetSet.has(String(v.vehicleId))),
+        };
 
-    if (selectedExpenseType === "all") return base;
-
-    // Recalcular métricas según tipo seleccionado usando breakdown
-    const filteredBreakdown = base.vehicleBreakdown.map(v => ({
+    // Apply expense type filter to breakdown and recompute totals accordingly
+    const adjustedBreakdown = baseFiltered.vehicleBreakdown.map(v => ({
       ...v,
       maintenanceCost: selectedExpenseType === "fueling" ? 0 : v.maintenanceCost,
       fuelingCost: selectedExpenseType === "maintenance" ? 0 : v.fuelingCost,
       totalCost: selectedExpenseType === "maintenance" ? v.maintenanceCost : selectedExpenseType === "fueling" ? v.fuelingCost : v.totalCost,
     }));
 
-    const totalMaintenanceCost = filteredBreakdown.reduce((s, v) => s + v.maintenanceCost, 0);
-    const totalFuelingCost = filteredBreakdown.reduce((s, v) => s + v.fuelingCost, 0);
+    const totalMaintenanceCost = adjustedBreakdown.reduce((s, v) => s + v.maintenanceCost, 0);
+    const totalFuelingCost = adjustedBreakdown.reduce((s, v) => s + v.fuelingCost, 0);
     const totalOverallCost = totalMaintenanceCost + totalFuelingCost;
-    const kmDrivenInPeriod = base.kmDrivenInPeriod;
+    const kmDrivenInPeriod = baseFiltered.kmDrivenInPeriod;
 
-    // Ajustes de galones y eficiencia para "solo mantenimiento"
-    const totalGallonsConsumed = selectedExpenseType === "maintenance" ? 0 : base.totalGallonsConsumed;
-    const maintenanceLogCount = selectedExpenseType === "fueling" ? 0 : base.maintenanceLogCount;
-    const fuelingLogCount = selectedExpenseType === "maintenance" ? 0 : base.fuelingLogCount;
+    const totalGallonsConsumed = selectedExpenseType === "maintenance" ? 0 : baseFiltered.totalGallonsConsumed;
+    const maintenanceLogCount = selectedExpenseType === "fueling" ? 0 : baseFiltered.maintenanceLogCount;
+    const fuelingLogCount = selectedExpenseType === "maintenance" ? 0 : baseFiltered.fuelingLogCount;
 
     const costPerKm = kmDrivenInPeriod && totalOverallCost > 0 ? totalOverallCost / kmDrivenInPeriod : null;
     const avgFuelEfficiency = kmDrivenInPeriod && totalGallonsConsumed > 0 ? kmDrivenInPeriod / totalGallonsConsumed : null;
@@ -191,15 +270,15 @@ export default function ComparativeExpenseAnalysisPage() {
       kmDrivenInPeriod,
       costPerKm,
       avgFuelEfficiency,
-      vehicleBreakdown: filteredBreakdown,
+      vehicleBreakdown: adjustedBreakdown,
     } as ComparativeExpenseSummary;
-  }, [summary, selectedExpenseType]);
+  }, [summary, selectedExpenseType, selectedVehicleIds]);
 
   const handlePrint = () => window.print();
 
   const handleExportCSV = () => {
-    if (comparativeData.vehicleBreakdown.length === 0 && selectedVehicleId === "all") return;
-    if (selectedVehicleId !== "all" && !comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleId)) return;
+    if (comparativeData.vehicleBreakdown.length === 0 && selectedVehicleIds.length === 0) return;
+    if (selectedVehicleIds.length === 1 && !comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleIds[0])) return;
     
     let csvRows: string[] = [];
     const headers = ["Métrica", "Valor"];
@@ -218,8 +297,8 @@ export default function ComparativeExpenseAnalysisPage() {
     csvRows.push(`Num. Registros Combustible,${comparativeData.fuelingLogCount}`);
     csvRows.push(""); // Spacer
 
-    // Vehicle Breakdown (if 'all' or specific vehicle has data)
-    if (selectedVehicleId === "all" && comparativeData.vehicleBreakdown.length > 0) {
+    // Vehicle Breakdown (if 'all' or multi-select subset)
+    if (selectedVehicleIds.length === 0 && comparativeData.vehicleBreakdown.length > 0) {
       csvRows.push("Desglose por Vehículo");
       const vehicleHeaders = ["Matrícula", "Marca y Modelo", "Costo Mantenimiento (C$)", "Costo Combustible (C$)", "Costo Total (C$)", "Km Recorridos"]; 
       csvRows.push(vehicleHeaders.join(','));
@@ -233,8 +312,8 @@ export default function ComparativeExpenseAnalysisPage() {
           v.kmDriven != null ? formatNumber(v.kmDriven) : 'N/A'
         ].join(','));
       });
-    } else if (selectedVehicleId !== "all") {
-        const vehicleData = comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleId);
+    } else if (selectedVehicleIds.length === 1) {
+        const vehicleData = comparativeData.vehicleBreakdown.find(v => v.vehicleId === selectedVehicleIds[0]);
         if (vehicleData) {
             csvRows.push(`Detalle Vehículo: ${vehicleData.plateNumber}`);
       csvRows.push(["Métrica", "Valor"].join(','));
@@ -243,6 +322,21 @@ export default function ComparativeExpenseAnalysisPage() {
       csvRows.push(`Costo Total (C$),${formatCurrency(vehicleData.totalCost)}`);
       csvRows.push(`Km Recorridos,${vehicleData.kmDriven != null ? formatNumber(vehicleData.kmDriven) : 'N/A'}`);
         }
+    } else if (selectedVehicleIds.length > 1) {
+      const set = new Set(selectedVehicleIds);
+      csvRows.push("Desglose por Vehículo (seleccionados)");
+      const vehicleHeaders = ["Matrícula", "Marca y Modelo", "Costo Mantenimiento (C$)", "Costo Combustible (C$)", "Costo Total (C$)", "Km Recorridos"]; 
+      csvRows.push(vehicleHeaders.join(','));
+      comparativeData.vehicleBreakdown.filter(v => set.has(String(v.vehicleId))).forEach(v => {
+        csvRows.push([
+          v.plateNumber,
+          v.brandModel,
+          formatCurrency(v.maintenanceCost),
+          formatCurrency(v.fuelingCost),
+          formatCurrency(v.totalCost),
+          v.kmDriven != null ? formatNumber(v.kmDriven) : 'N/A'
+        ].join(','));
+      });
     }
 
     const csvString = csvRows.join('\n');
@@ -286,7 +380,7 @@ export default function ComparativeExpenseAnalysisPage() {
     ], "informe_comparativo_gastos");
   };
   
-  const selectedVehicleInfo = selectedVehicleId !== "all" ? vehicles.find(v => v.id === selectedVehicleId) : null;
+  const selectedVehicleInfo = selectedVehicleIds.length === 1 ? vehicles.find(v => v.id === selectedVehicleIds[0]) : null;
 
   return (
     <>
@@ -294,148 +388,73 @@ export default function ComparativeExpenseAnalysisPage() {
         title="Informe Comparativo de Gastos"
         description="Analiza y compara los gastos de mantenimiento y combustible de tu flota."
         icon={BarChartHorizontalBig}
-        actions={
-          <div className="page-header-actions flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2">
-              <div className="min-w-[220px]">
-                <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar vehículo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los vehículos</SelectItem>
-                    {vehicles.map(v => (<SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start">
-                    <CalendarDays className="mr-2 h-4 w-4" />
-                    {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    numberOfMonths={2}
-                    selected={dateRange}
-                    onSelect={setDateRange}
-                    defaultMonth={dateRange?.from}
-                    locale={es}
-                  />
-                </PopoverContent>
-              </Popover>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">Rangos rápidos</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" /> Imprimir
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleExportCSV} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
-                <FileDown className="mr-2 h-4 w-4" /> CSV
-              </Button>
-              <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleId === 'all') }>
-                <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
-              </Button>
-            </div>
-          </div>
-        }
       />
+      <div className="mb-4 flex flex-wrap md:flex-nowrap items-center gap-1.5 justify-end">
+        <VehicleMultiSelect vehicles={vehicles} selectedIds={selectedVehicleIds} onChange={setSelectedVehicleIds} buttonLabel="Vehículos" />
+        <div className="min-w-[220px]">
+          <Select value={selectedExpenseType} onValueChange={setSelectedExpenseType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tipo de gasto" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los Gastos</SelectItem>
+              <SelectItem value="maintenance">Solo Mantenimiento</SelectItem>
+              <SelectItem value="fueling">Solo Combustible</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="justify-start">
+              <CalendarDays className="mr-2 h-4 w-4" />
+              {dateRange?.from && dateRange?.to ? `${format(dateRange.from, "P", {locale: es})} - ${format(dateRange.to, "P", {locale: es})}` : "Rango de fechas"}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="range"
+              numberOfMonths={2}
+              selected={dateRange}
+              onSelect={setDateRange}
+              defaultMonth={dateRange?.from}
+              locale={es}
+            />
+          </PopoverContent>
+        </Popover>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline">Rangos rápidos</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button variant="outline" onClick={handlePrint}>
+          <Printer className="mr-2 h-4 w-4" /> Imprimir
+        </Button>
+        <Button variant="outline" onClick={handleExportCSV} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleIds.length === 0) }>
+          <FileDown className="mr-2 h-4 w-4" /> CSV
+        </Button>
+        <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleExportXLSX} disabled={isLoading || (!comparativeData.vehicleBreakdown.length && selectedVehicleIds.length === 0) }>
+          <FileDown className="mr-2 h-4 w-4" /> Excel (XLSX)
+        </Button>
+      </div>
 
-      <Card className="mb-6 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center"><Filter className="mr-2 h-5 w-5"/>Filtros del Informe</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <label htmlFor="vehicle-select" className="text-sm font-medium">Vehículo</label>
-            <Select value={selectedVehicleId} onValueChange={setSelectedVehicleId}>
-              <SelectTrigger id="vehicle-select">
-                <SelectValue placeholder="Seleccionar vehículo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los vehículos</SelectItem>
-                {vehicles.map(v => <SelectItem key={v.id} value={v.id}>{v.plateNumber} ({v.brand} {v.model})</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="expense-type-select" className="text-sm font-medium">Tipo de Gasto</label>
-            <Select value={selectedExpenseType} onValueChange={setSelectedExpenseType}>
-              <SelectTrigger id="expense-type-select">
-                <SelectValue placeholder="Seleccionar tipo de gasto" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los Gastos</SelectItem>
-                <SelectItem value="maintenance">Solo Mantenimiento</SelectItem>
-                <SelectItem value="fueling">Solo Combustible</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-             <label htmlFor="date-range-picker" className="text-sm font-medium">Rango de Fechas</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button id="date-range-picker" variant="outline" className="w-full justify-start text-left font-normal">
-                  <CalendarDays className="mr-2 h-4 w-4" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      `${format(dateRange.from, "LLL dd, y", { locale: es })} - ${format(dateRange.to, "LLL dd, y", { locale: es })}`
-                    ) : (
-                      format(dateRange.from, "LLL dd, y", { locale: es })
-                    )
-                  ) : (
-                    <span>Seleccionar rango</span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  initialFocus
-                  mode="range"
-                  defaultMonth={dateRange?.from}
-                  selected={dateRange}
-                  onSelect={setDateRange}
-                  numberOfMonths={2}
-                  locale={es}
-                />
-              </PopoverContent>
-            </Popover>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">Rangos rápidos</Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onClick={() => applyPreset("last7")}>Últimos 7 días</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset("last30")}>Últimos 30 días</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset("last90")}>Últimos 90 días</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset("thisMonth")}>Este mes</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset("lastMonth")}>Mes anterior</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => applyPreset("ytd")}>Año en curso (YTD)</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card className="shadow-lg printable-area">
         <CardHeader>
           <CardTitle className="text-2xl">
             Resumen de Gastos 
-            {selectedVehicleInfo ? ` para ${selectedVehicleInfo.plateNumber}` : selectedVehicleId === "all" ? " (Todos los Vehículos)" : ""}
+            {selectedVehicleInfo
+              ? ` para ${selectedVehicleInfo.plateNumber}`
+              : selectedVehicleIds.length === 0
+                ? " (Todos los vehículos)"
+                : ` (Vehículos seleccionados: ${selectedVehicleIds.length})`}
             {dateRange?.from && dateRange?.to ? ` (${format(dateRange.from, "P", {locale:es})} - ${format(dateRange.to, "P", {locale:es})})` : ""}
           </CardTitle>
           <CardDescription>
@@ -449,48 +468,50 @@ export default function ComparativeExpenseAnalysisPage() {
             <p className="text-muted-foreground">Cargando datos del informe...</p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-              <Card className="bg-muted/30">
-                <CardHeader><CardTitle className="text-sm font-medium">Costo Mantenimiento</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalMaintenanceCost)}</p></CardContent>
+              <Card className="bg-muted/30 h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Costo Mantenimiento</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalMaintenanceCost)}</p></CardContent>
               </Card>
-              <Card className="bg-muted/30">
-                <CardHeader><CardTitle className="text-sm font-medium">Costo Combustible</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalFuelingCost)}</p></CardContent>
+              <Card className="bg-muted/30 h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Costo Combustible</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalFuelingCost)}</p></CardContent>
               </Card>
-              <Card className="bg-primary text-primary-foreground">
-                <CardHeader><CardTitle className="text-sm font-medium">Costo Total General</CardTitle></CardHeader>
-                <CardContent><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalOverallCost)}</p></CardContent>
+              <Card className="bg-primary text-primary-foreground h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-primary-foreground">Costo Total General</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-2xl font-bold">{formatCurrency(comparativeData.totalOverallCost)}</p></CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Galones Consumidos</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{formatNumber(comparativeData.totalGallonsConsumed, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</p></CardContent>
+              <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Galones Consumidos</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{formatNumber(comparativeData.totalGallonsConsumed, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}</p></CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Km Recorridos (Período)</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.kmDrivenInPeriod != null ? formatNumber(comparativeData.kmDrivenInPeriod) : 'N/A'}</p></CardContent>
+              <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Km Recorridos (Período)</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{comparativeData.kmDrivenInPeriod != null ? formatNumber(comparativeData.kmDrivenInPeriod) : 'N/A'}</p></CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Costo por Km (General)</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.costPerKm != null ? formatCurrency(comparativeData.costPerKm) : 'N/A'}</p></CardContent>
+              <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Costo por Km (General)</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{comparativeData.costPerKm != null ? formatCurrency(comparativeData.costPerKm) : 'N/A'}</p></CardContent>
               </Card>
-               <Card>
-                <CardHeader><CardTitle className="text-sm font-medium">Eficiencia Prom. (km/gal)</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.avgFuelEfficiency ? `${comparativeData.avgFuelEfficiency.toFixed(1)} km/gal` : 'N/A'}</p></CardContent>
+               <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground">Eficiencia Prom. (km/gal)</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{comparativeData.avgFuelEfficiency ? `${comparativeData.avgFuelEfficiency.toFixed(1)} km/gal` : 'N/A'}</p></CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium"># Mantenimientos</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.maintenanceLogCount}</p></CardContent>
+              <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground"># Mantenimientos</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{comparativeData.maintenanceLogCount}</p></CardContent>
               </Card>
-              <Card>
-                <CardHeader><CardTitle className="text-sm font-medium"># Cargas Combustible</CardTitle></CardHeader>
-                <CardContent><p className="text-xl">{comparativeData.fuelingLogCount}</p></CardContent>
+              <Card className="h-full">
+                <CardHeader className="items-center text-center"><CardTitle className="text-sm font-medium text-muted-foreground"># Cargas Combustible</CardTitle></CardHeader>
+                <CardContent className="flex flex-col items-center text-center gap-1"><p className="text-xl">{comparativeData.fuelingLogCount}</p></CardContent>
               </Card>
             </div>
           )}
 
-          {selectedVehicleId === "all" && !isLoading && comparativeData.vehicleBreakdown.length > 0 && (
+          {(selectedVehicleIds.length === 0 || selectedVehicleIds.length > 1) && !isLoading && comparativeData.vehicleBreakdown.length > 0 && (
             <>
-              <h3 className="text-xl font-semibold my-4 text-primary">Desglose por Vehículo</h3>
+              <h3 className="text-xl font-semibold my-4 text-primary">
+                Desglose por Vehículo{selectedVehicleIds.length > 1 ? " (seleccionados)" : ""}
+              </h3>
               <Table className="text-base [&_th]:px-4 [&_th]:py-2 md:[&_th]:py-3 [&_td]:px-4 [&_td]:py-2 md:[&_td]:py-3">
                 <TableHeader>
                   <TableRow>
@@ -503,7 +524,9 @@ export default function ComparativeExpenseAnalysisPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {comparativeData.vehicleBreakdown.filter(v => v.totalCost > 0 || v.kmDriven).map(v => (
+                  {comparativeData.vehicleBreakdown
+                    .filter(v => (selectedVehicleIds.length === 0 || selectedVehicleIds.includes(String(v.vehicleId))) && (v.totalCost > 0 || v.kmDriven))
+                    .map(v => (
                     <TableRow key={v.vehicleId}>
                       <TableCell>{v.plateNumber}</TableCell>
                       <TableCell>{v.brandModel}</TableCell>

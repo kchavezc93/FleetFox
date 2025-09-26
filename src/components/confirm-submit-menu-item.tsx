@@ -13,15 +13,19 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 
 type Props = React.ComponentProps<typeof DropdownMenuItem> & {
   confirmMessage: string;
   title?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  successToastTitle?: string;
+  successToastDescription?: string;
 };
 
-export function ConfirmSubmitMenuItem({ confirmMessage, className, children, title = "Confirmar acción", confirmLabel = "Confirmar", cancelLabel = "Cancelar", ...rest }: Props) {
+export function ConfirmSubmitMenuItem({ confirmMessage, className, children, title = "Confirmar acción", confirmLabel = "Confirmar", cancelLabel = "Cancelar", successToastTitle, successToastDescription, ...rest }: Props) {
+  const { toast } = useToast();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -45,6 +49,9 @@ export function ConfirmSubmitMenuItem({ confirmMessage, className, children, tit
           <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
+              if (successToastTitle) {
+                toast({ title: successToastTitle, description: successToastDescription });
+              }
               const target = (e.target as HTMLElement) || null;
               const form = target?.closest("form") as HTMLFormElement | null;
               form?.requestSubmit();

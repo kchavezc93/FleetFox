@@ -33,6 +33,7 @@ export type FuelConsumptionSummary = {
   totalGallons: number;
   totalCost: number;
   avgEfficiency?: number; // km/gal
+  totalKilometers?: number; // computed as max(odometer) - min(odometer) within range
   logCount: number;
 };
 
@@ -227,6 +228,8 @@ export async function getFuelConsumptionSummary(params: ReportParams = {}): Prom
         SUM(f.quantityLiters) AS totalLiters,
         SUM(f.totalCost) AS totalCost,
         AVG(CASE WHEN f.fuelEfficiencyKmPerGallon IS NOT NULL THEN f.fuelEfficiencyKmPerGallon END) AS avgEfficiency,
+        MIN(CASE WHEN f.mileageAtFueling IS NOT NULL THEN f.mileageAtFueling END) AS minMileage,
+        MAX(CASE WHEN f.mileageAtFueling IS NOT NULL THEN f.mileageAtFueling END) AS maxMileage,
         COUNT(1) AS logCount
       FROM vehicles v
       INNER JOIN fueling_logs f ON f.vehicleId = v.id
@@ -240,6 +243,9 @@ export async function getFuelConsumptionSummary(params: ReportParams = {}): Prom
     return result.recordset.map((row: any) => {
       const liters = parseFloat(row.totalLiters ?? 0);
       const gallons = liters / LITERS_PER_GALLON;
+      const minMileage = row.minMileage != null ? Number(row.minMileage) : null;
+      const maxMileage = row.maxMileage != null ? Number(row.maxMileage) : null;
+      const totalKilometers = (minMileage != null && maxMileage != null && maxMileage >= minMileage) ? (maxMileage - minMileage) : undefined;
       return {
         vehicleId: row.vehicleId?.toString?.() ?? String(row.vehicleId),
         plateNumber: row.plateNumber,
@@ -248,6 +254,7 @@ export async function getFuelConsumptionSummary(params: ReportParams = {}): Prom
         totalGallons: gallons,
         totalCost: parseFloat(row.totalCost ?? 0),
         avgEfficiency: row.avgEfficiency != null ? parseFloat(row.avgEfficiency) : undefined,
+        totalKilometers,
         logCount: Number(row.logCount) || 0,
       };
     }) as FuelConsumptionSummary[];
