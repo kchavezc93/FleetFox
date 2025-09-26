@@ -11,9 +11,10 @@ import { VoucherGallery } from "@/components/voucher-gallery";
 
 const LITERS_PER_GALLON = 3.78541;
 
-export default async function FuelingDetailsPage({ params }: { params: { id: string } }) {
+export default async function FuelingDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await requirePermission('/fueling');
-  const log = await getFuelingLogById(params.id);
+  const log = await getFuelingLogById(id);
   if (!log) {
     return (
       <div className="p-6">

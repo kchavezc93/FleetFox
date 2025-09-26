@@ -3,7 +3,6 @@
 import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
-import { deleteFuelingVoucher } from "@/lib/actions/fueling-actions";
 
 type Voucher = {
   id: string;
@@ -46,7 +45,20 @@ export function VoucherGallery({ vouchers, fuelingLogId }: VoucherGalleryProps) 
             <div className="p-1 text-xs flex items-center justify-between gap-2">
               <div className="truncate" title={v.fileName}>{v.fileName}</div>
               {fuelingLogId && (
-                <form action={async () => { "use server"; await deleteFuelingVoucher(v.id, fuelingLogId); }}>
+                <form
+                  action={async () => {
+                    try {
+                      await fetch('/api/fueling/vouchers/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ voucherId: v.id, logId: fuelingLogId }),
+                      });
+                      // Let the page refetch or rely on revalidatePath server-side after deletion
+                    } catch (e) {
+                      console.error('Error eliminando voucher', e);
+                    }
+                  }}
+                >
                   <ConfirmSubmitButton variant="destructive" confirmMessage="¿Eliminar este voucher?" className="h-6 px-2 py-0 text-xs">
                     Eliminar
                   </ConfirmSubmitButton>

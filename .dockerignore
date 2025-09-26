@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+Dockerfile*
+.dockerignore
+.git
+.gitignore
+.vscode
+.env
+.env.*
+.next/cache
+**/*.md
+build.log
+tsconfig.tsbuildinfo
+docs
+src/db.config.json
+public/images/**/*.psd
+public/images/**/*.ai

@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { VoucherGallery } from "@/components/voucher-gallery";
 
-export default async function MobileFuelingDetailPage({ params }: { params: { id: string } }) {
+export default async function MobileFuelingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await requirePermission('/fueling-mobile');
-  const log = await getFuelingLogById(params.id);
+  const log = await getFuelingLogById(id);
   if (!log) {
     return <div className="max-w-md mx-auto p-4 text-sm text-muted-foreground">Registro no encontrado.</div>;
   }

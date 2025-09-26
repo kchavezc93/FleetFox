@@ -242,6 +242,68 @@ Para producción, la opción más estable y simple es ejecutar la app Node.js co
 3) Windows (si se requiere)
 - Puedes usar PM2 en Windows del mismo modo y front con IIS ARR como reverse proxy. Sin embargo, prioriza Linux si buscas menor fricción operativa.
 
+## Ejecutar con Docker (Windows, LAN y acceso externo)
+
+Este repositorio incluye un `Dockerfile` multi-stage y un `docker-compose.yml` para levantar la app de forma reproducible.
+
+### 1) Preparar `.env`
+- Copia `.env.example` a `.env` y completa las variables (DB_HOST, DB_USER, etc.). Si tu SQL Server está en tu red, usa su IP LAN (por ejemplo `192.168.1.50`).
+
+### 2) Construir la imagen y levantar el servicio
+```powershell
+docker compose build
+docker compose up -d
+```
+La app quedará expuesta en `http://<IP_DE_TU_PC>:9002`. En la misma máquina también responde en `http://localhost:9002`.
+
+Notas
+- `docker-compose.yml` mapea el puerto contenedor 3000 al host 9002.
+- El contenedor corre como usuario no root y usa la build `standalone` de Next.js.
+- Si el SQL Server está fuera de Docker, asegúrate de que el host del contenedor pueda alcanzarlo (firewall y reglas de red). Configura `DB_HOST` con la IP/hostname alcanzable desde el contenedor.
+
+### 3) Firewall en Windows
+Permite el puerto 9002 en el firewall de Windows para conexiones entrantes desde tu LAN:
+```powershell
+New-NetFirewallRule -DisplayName "FleetFox 9002" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9002
+```
+
+### 4) Hacerlo público para la empresa (LAN)
+- Entrega a tus usuarios la URL `http://<IP_DE_TU_PC>:9002` o configura un DNS interno (ej. `fleetfox.tuempresa.local`) apuntando a la IP de esa máquina.
+- Opcional: instala un reverse proxy (Nginx/Traefik) delante del contenedor para TLS interno y rutas amigables.
+
+### 5) Acceso desde fuera (NAT / Kiosk)
+Si quieres que usuarios externos accedan, tienes dos opciones:
+- NAT/Port Forward en tu router/firewall
+    - Reenvía el puerto 80/443 (o 9002) desde tu IP pública hacia el `9002` del host Windows.
+    - Recomendado: usa un proxy con TLS en el perímetro y reenvía al 9002 interno, así los kioskos usan HTTPS.
+    - Asegúrate de endurecer cookies y CORS si expones público: `SESSION_COOKIE_SECURE=true`, usar HTTPS y dominio.
+- VPN
+    - Alternativa más segura: que los kioskos se conecten a tu red por VPN y usen la URL interna.
+
+### 6) Salud, reinicio y logs
+- `docker-compose.yml` define un `healthcheck`. Ver estado: `docker ps`.
+- Reinicio automático ante fallos con `restart: unless-stopped`.
+- Logs: `docker compose logs -f web`.
+
+### 7) SQL Server en contenedor (opcional solo DEV)
+Si prefieres un SQL Server en Docker para pruebas, descomenta el servicio `mssql` en `docker-compose.yml`. Para producción, usa tu instancia administrada.
+
+### 8) Actualizar versión de la app
+```powershell
+git pull
+docker compose build --no-cache
+docker compose up -d
+```
+
+### 9) Variables sensibles
+- No subas `.env` al repositorio. Controla secretos con un cofre (Azure Key Vault, HashiCorp Vault) o configura variables directamente al servicio en tu orquestador.
+
+### 10) Endurecimiento recomendado cuando es público
+- Coloca un reverse proxy con TLS (Let's Encrypt o tu CA corporativa).
+- Fuerza HTTPS y `SESSION_COOKIE_SECURE=true` en `.env`.
+- Revisa cabeceras de seguridad en el proxy: HSTS, X-Frame-Options, CSP según necesidades.
+- Limita orígenes de imágenes si hospedas contenido externo.
+
 ## Notas de arquitectura y seguridad
 
 - Autenticación: Implementada con `bcryptjs`, sesiones en BD (tabla `sessions`) y cookie HttpOnly `session_token`. Middleware protege rutas y el layout valida sesión en la BD.

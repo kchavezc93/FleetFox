@@ -4,10 +4,11 @@ import { getVehicles } from "@/lib/actions/vehicle-actions";
 import { FuelingForm } from "@/components/fueling-form";
 import { notFound } from "next/navigation";
 
-export default async function MobileFuelingEditPage({ params }: { params: { id: string } }) {
+export default async function MobileFuelingEditPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await requirePermission('/fueling-mobile');
   const [log, vehicles] = await Promise.all([
-    getFuelingLogById(params.id),
+    getFuelingLogById(id),
     getVehicles(),
   ]);
   if (!log) notFound();
@@ -15,7 +16,7 @@ export default async function MobileFuelingEditPage({ params }: { params: { id: 
 
   async function submit(data: any) {
     "use server";
-    return await updateFuelingLog(params.id, data);
+    return await updateFuelingLog(id, data);
   }
 
   return (
@@ -23,7 +24,7 @@ export default async function MobileFuelingEditPage({ params }: { params: { id: 
       <FuelingForm
         vehicles={activeVehicles}
         onSubmitAction={submit as any}
-        redirectPath={`/fueling/mobile/${params.id}`}
+  redirectPath={`/fueling/mobile/${id}`}
         initial={{
           vehicleId: log!.vehicleId,
           fuelingDate: new Date(log!.fuelingDate + 'T00:00:00'),

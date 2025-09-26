@@ -4,10 +4,9 @@ import { Users } from "lucide-react";
 import { UserForm } from "@/components/user-form";
 import { getUserById, saveUser } from "@/lib/actions/user-actions";
 
-type Params = { params: { id: string } };
-
-export default async function EditUserPage({ params }: Params) {
-  const user = await getUserById(params.id);
+export default async function EditUserPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const user = await getUserById(id);
 
   async function submit(data: any) {
     "use server";
@@ -20,7 +19,7 @@ export default async function EditUserPage({ params }: Params) {
       permissions: Array.isArray(data.permissions) ? data.permissions : [],
       active: !!data.active,
       password: data.password || undefined,
-    } as any, params.id);
+  } as any, id);
   }
 
   return (

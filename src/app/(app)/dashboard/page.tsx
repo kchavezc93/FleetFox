@@ -6,6 +6,7 @@ import { Alert as AlertUI, AlertDescription, AlertTitle } from "@/components/ui/
 import { CarFront, Wrench, Fuel, Bell, ArrowRight, AlertTriangle, DollarSign, BarChartHorizontalBig } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
+import MonthlyCostChart from "@/components/monthly-cost-chart";
 import { getVehicles, getUpcomingMaintenanceCount } from "@/lib/actions/vehicle-actions";
 import { getMaintenanceLogs } from "@/lib/actions/maintenance-actions";
 import { getFuelingLogs } from "@/lib/actions/fueling-actions";
@@ -13,15 +14,19 @@ import { getRecentAlerts } from "@/lib/actions/alert-actions";
 
 
 const getSpanishAlertType = (alertType: string): string => {
-  // Esta función es un placeholder. En producción, las traducciones de tipos de alerta
-  // deberían manejarse de forma más robusta, quizás desde la BD o un sistema i18n.
-  const formattedType = alertType.replace(/([A-Z])/g, ' $1').trim();
-  switch (formattedType) {
+  // Mapeo explícito para tipos de alerta conocidos en producción
+  switch (alertType) {
+    case "PreventiveMaintenanceDue":
     case "Preventive Maintenance Due":
-      return "Mantenimiento Preventivo Vencido";
-    // Añadir otras traducciones específicas si se conocen
+      return "Mantenimiento preventivo próximo";
+    case "DocumentExpiry":
+      return "Documento por vencer";
+    case "LowMileageEfficiency":
+      return "Eficiencia de combustible baja";
+    case "HighMaintenanceCost":
+      return "Costo de mantenimiento elevado";
     default:
-      return formattedType; 
+      return alertType.replace(/([A-Z])/g, ' $1').trim();
   }
 };
 export default async function DashboardPage() {
@@ -72,16 +77,19 @@ export default async function DashboardPage() {
     // Los valores por defecto (0 / []) permanecerán.
   }
 
+  // Formateador de moneda (ajustable vía entorno si en el futuro se internacionaliza)
+  const nf = new Intl.NumberFormat('es-NI', { style: 'currency', currency: 'NIO' });
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-primary">Panel de Control</h1>
+        <h1 className="text-3xl font-bold text-primary">Panel de control</h1>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Vehículos Totales</CardTitle>
+            <CardTitle className="text-sm font-medium">Vehículos totales</CardTitle>
             <CarFront className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -93,7 +101,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mantenimiento Próximo</CardTitle>
+            <CardTitle className="text-sm font-medium">Mantenimiento próximo</CardTitle>
             <Wrench className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -105,7 +113,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Alertas Recientes</CardTitle>
+            <CardTitle className="text-sm font-medium">Alertas recientes</CardTitle>
             <Bell className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -120,24 +128,24 @@ export default async function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-primary">Acciones Rápidas</CardTitle>
+            <CardTitle className="text-primary">Accesos rápidos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <Link href="/vehicles/new" passHref>
               <Button className="w-full justify-start" variant="outline">
-                <CarFront className="mr-2 h-4 w-4" /> Agregar Nuevo Vehículo
+                <CarFront className="mr-2 h-4 w-4" /> Agregar vehículo
                 <ArrowRight className="ml-auto h-4 w-4" />
               </Button>
             </Link>
             <Link href="/maintenance/new" passHref>
               <Button className="w-full justify-start" variant="outline">
-                <Wrench className="mr-2 h-4 w-4" /> Registrar Mantenimiento
+                <Wrench className="mr-2 h-4 w-4" /> Registrar mantenimiento
                 <ArrowRight className="ml-auto h-4 w-4" />
               </Button>
             </Link>
             <Link href="/fueling/new" passHref>
               <Button className="w-full justify-start" variant="outline">
-                <Fuel className="mr-2 h-4 w-4" /> Registrar Carga de Combustible
+                <Fuel className="mr-2 h-4 w-4" /> Registrar carga de combustible
                 <ArrowRight className="ml-auto h-4 w-4" />
               </Button>
             </Link>
@@ -146,9 +154,9 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-primary">Alertas Recientes</CardTitle>
+            <CardTitle className="text-primary">Alertas recientes</CardTitle>
             <CardDescription>
-              Alertas críticas y nuevas para su flota. (Lógica de BD para alertas pendiente en alert-actions.ts)
+              Alertas críticas y nuevas de la flota.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 max-h-96 overflow-y-auto">
@@ -161,7 +169,7 @@ export default async function DashboardPage() {
                 </AlertDescription>
               </AlertUI>
             )) : (
-              <p className="text-sm text-muted-foreground">No hay alertas nuevas. (Lógica de BD pendiente)</p>
+              <p className="text-sm text-muted-foreground">No hay alertas nuevas.</p>
             )}
             {recentAlerts.length > 5 && (
                 <Link href="/alerts" className="text-sm text-primary hover:underline">Ver todas las alertas</Link>
@@ -172,46 +180,39 @@ export default async function DashboardPage() {
       
       <Card>
         <CardHeader>
-          <CardTitle className="text-primary flex items-center"><DollarSign className="mr-2 h-6 w-6"/>Resumen de Gastos del Mes Actual</CardTitle>
-          <CardDescription>Visualización de los gastos de mantenimiento y combustible para el mes corriente.</CardDescription>
+          <CardTitle className="text-primary flex items-center"><DollarSign className="mr-2 h-6 w-6"/>Gastos del mes en curso</CardTitle>
+          <CardDescription>Gastos de mantenimiento y combustible del mes actual.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg font-semibold">Costos del Mes</CardTitle>
-              <CardDescription>Desglose de gastos incurridos en el mes actual.</CardDescription>
+              <CardTitle className="text-lg font-semibold">Costos</CardTitle>
+              <CardDescription>Desglose del mes actual.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="flex items-center"><Wrench className="mr-2 h-4 w-4 text-muted-foreground"/>Mantenimiento:</span> 
-                <span className="font-medium">C${currentMonthMaintenanceCost.toFixed(2)}</span>
+                <span className="font-medium">{nf.format(currentMonthMaintenanceCost)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="flex items-center"><Fuel className="mr-2 h-4 w-4 text-muted-foreground"/>Combustible:</span> 
-                <span className="font-medium">C${currentMonthFuelingCost.toFixed(2)}</span>
+                <span className="font-medium">{nf.format(currentMonthFuelingCost)}</span>
               </div>
               <div className="flex justify-between pt-2 border-t font-bold">
-                <span>Total General (Mes):</span> 
-                <span>C${(currentMonthMaintenanceCost + currentMonthFuelingCost).toFixed(2)}</span>
+                <span>Total general (mes):</span> 
+                <span>{nf.format(currentMonthMaintenanceCost + currentMonthFuelingCost)}</span>
               </div>
             </CardContent>
           </Card>
           <Card className="lg:col-span-2">
             <CardHeader>
-              <CardTitle className="text-lg font-semibold flex items-center"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-muted-foreground"/>Comparación de Gastos (Gráfico)</CardTitle>
+              <CardTitle className="text-lg font-semibold flex items-center"><BarChartHorizontalBig className="mr-2 h-5 w-5 text-muted-foreground"/>Comparación de gastos</CardTitle>
                <CardDescription>
-                 Representación visual de los gastos de mantenimiento vs. combustible. (Funcionalidad pendiente de implementación de gráficos)
+                 Mantenimiento vs. combustible en el mes actual.
                </CardDescription>
             </CardHeader>
-            <CardContent className="h-48 bg-muted/50 rounded-lg flex items-center justify-center p-4">
-               <Image 
-                src="https://placehold.co/400x200.png" 
-                alt="Gráfico de Comparación de Gastos (Marcador de posición)" 
-                width={400} 
-                height={200}
-                data-ai-hint="monthly costs bar chart"
-                className="rounded-md opacity-75"
-              />
+            <CardContent className="p-4">
+              <MonthlyCostChart maintenance={currentMonthMaintenanceCost} fueling={currentMonthFuelingCost} />
             </CardContent>
           </Card>
         </CardContent>

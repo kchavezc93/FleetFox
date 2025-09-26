@@ -1,0 +1,96 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Typecheck",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run build"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (post-clean)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build (retry)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run build"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Typecheck (all pages fixed)",
+			"type": "shell",
+			"command": "cmd",
+			"args": [
+				"/c",
+				"npm run typecheck"
+			],
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		}
+	]
+}

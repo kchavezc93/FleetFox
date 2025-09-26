@@ -39,8 +39,9 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
   );
 }
 
-export default async function VehicleDetailsPage({ params }: { params: { id: string } }) {
-  const vehicle = await getVehicleById(params.id);
+export default async function VehicleDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const vehicle = await getVehicleById(id);
 
   if (!vehicle) {
     notFound();

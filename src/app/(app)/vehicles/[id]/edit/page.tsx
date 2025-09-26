@@ -9,15 +9,16 @@ import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import type { VehicleFormData } from "@/types";
 
-export default async function EditVehiclePage({ params }: { params: { id: string } }) {
-  const vehicle = await getVehicleById(params.id);
+export default async function EditVehiclePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const vehicle = await getVehicleById(id);
 
   if (!vehicle) {
     notFound();
   }
   
   // Bind the vehicle id to the updateVehicle server action
-  const boundUpdateVehicleAction = updateVehicle.bind(null, params.id);
+  const boundUpdateVehicleAction = updateVehicle.bind(null, id);
 
   return (
     <>

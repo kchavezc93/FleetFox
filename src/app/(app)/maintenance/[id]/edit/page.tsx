@@ -15,9 +15,9 @@ import { Card, CardContent } from "@/components/ui/card";
   export default async function EditMaintenanceLogPage({
     params,
   }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
   }) {
-    const id = params.id;
+    const { id } = await params;
 
     const [maintenanceLog, vehicles] = await Promise.all([
       getMaintenanceLogById(id),

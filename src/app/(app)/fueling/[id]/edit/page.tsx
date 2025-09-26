@@ -9,10 +9,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { requirePermission } from "@/lib/authz";
 
-export default async function EditFuelingPage({ params }: { params: { id: string } }) {
+export default async function EditFuelingPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await requirePermission('/fueling');
   const [log, vehicles] = await Promise.all([
-    getFuelingLogById(params.id),
+    getFuelingLogById(id),
     getVehicles(),
   ]);
   if (!log) notFound();
@@ -20,7 +21,7 @@ export default async function EditFuelingPage({ params }: { params: { id: string
 
   async function submit(data: any) {
     "use server";
-    return await updateFuelingLog(params.id, data);
+  return await updateFuelingLog(id, data);
   }
 
   return (

@@ -54,9 +54,9 @@ function DetailItem({ icon: Icon, label, value, isBadge, badgeVariant, badgeClas
   export default async function MaintenanceLogDetailsPage({
     params,
   }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
   }) {
-    const id = params.id;
+    const { id } = await params;
     const log = await getMaintenanceLogById(id);
 
     if (!log) {

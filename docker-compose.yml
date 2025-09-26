@@ -1,0 +1,41 @@
+version: '3.9'
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fleetfox:latest
+    container_name: fleetfox-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "9002:3000" # Host:Container
+    environment:
+      # Ensure Next binds to all interfaces in container
+      - HOSTNAME=0.0.0.0
+      - PORT=3000
+    healthcheck:
+      # Use Node to probe the local server to avoid extra packages like wget/curl
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/', r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    # If your SQL Server is outside Docker, set DB_HOST to the LAN IP of the SQL host
+    # networks: [default]
+
+# Optionally, you can add a SQL Server container for local dev, e.g.:
+#  mssql:
+#    image: mcr.microsoft.com/mssql/server:2022-latest
+#    container_name: fleetfox-sql
+#    environment:
+#      - ACCEPT_EULA=Y
+#      - MSSQL_SA_PASSWORD=YourStrong!Passw0rd
+#    ports:
+#      - "1433:1433"
+#    volumes:
+#      - mssqldata:/var/opt/mssql
+#    restart: unless-stopped
+#
+#volumes:
+#  mssqldata:
