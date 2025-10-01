@@ -91,6 +91,7 @@ Para desarrollo, si las variables de entorno no están completas, `src/lib/db.ts
     *   `NEXT_PUBLIC_COMPANY_NAME`: Nombre de la empresa (ej. "Dos Robles").
     *   `NEXT_PUBLIC_COMPANY_LOGO_URL`: URL o ruta local a la imagen del logo (ej. `/logo.png` si está en la carpeta `public`).
     *   `APP_CURRENCY` y `APP_LOCALE`: Formato de moneda e idioma de la UI (ej. `NIO` y `es-NI`).
+    *   `NEXT_PUBLIC_VOUCHER_MAX_PER_FUELING`: Límite de comprobantes por carga (por defecto `2`).
         *   **Variables de Base de Datos**:
             *   `DB_TYPE`: Tipo de base de datos (ej. "SQLServer").
             *   `DB_HOST`: Host de tu servidor de base de datos (ej. "localhost").
@@ -180,6 +181,80 @@ cmd /c "npm run start"
 - Alertas: generar/actualizar estado; ver “Creado por” en UI.
 
 ## Despliegue recomendado
+
+Este proyecto está listo para tres caminos de despliegue en Windows. La opción recomendada es Docker por su reproducibilidad y aislamiento.
+
+### Opción A — Docker en Windows (Recomendada)
+
+Requisitos
+- Docker Desktop para Windows.
+- Archivo `.env` en la raíz con variables (ver sección de "Configuración de la Aplicación").
+
+Qué incluye el repositorio
+- `Dockerfile` multi-stage con `output: 'standalone'` (Next.js 15) y usuario no-root.
+- `docker-compose.yml` que expone 3000 del contenedor como 9002 en el host, lee `.env` y define `healthcheck`.
+
+Pasos
+```powershell
+docker compose build
+docker compose up -d
+```
+
+Acceso
+- Local: http://localhost:9002
+- LAN: http://<IP_DE_TU_PC>:9002
+
+Firewall en Windows (si requieres acceso desde LAN)
+```powershell
+New-NetFirewallRule -DisplayName "FleetFox 9002" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9002
+```
+
+Notas y checklist
+- Asegúrate de completar correctamente `.env` (DB_HOST debe ser alcanzable desde el contenedor: IP o hostname válido).
+- Healthcheck verifica `http://localhost:3000` dentro del contenedor.
+- Si usas SQL Server fuera de Docker, abre el puerto 1433 en el servidor SQL y en su firewall.
+- Para exponer público, colócalo detrás de un proxy HTTPS (IIS ARR/Nginx/Traefik) y activa `SESSION_COOKIE_SECURE=true`.
+
+### Opción B — Node.js + PM2 (servicio sencillo)
+
+Requisitos
+- Node.js 18.x o 20.x LTS
+- PM2 global (`npm i -g pm2`)
+
+Pasos
+```powershell
+npm install --omit=dev
+npm run build
+pm2 start "npm run start -- -p 9002" --name fleetfox
+pm2 save
+pm2 startup
+```
+
+Abrir puerto en Windows
+```powershell
+New-NetFirewallRule -DisplayName "FleetFox 9002" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 9002
+```
+
+Operación
+```powershell
+pm2 status
+pm2 logs fleetfox
+pm2 restart fleetfox
+```
+
+### Opción C — Servicio Windows con NSSM
+
+Requisitos
+- Node.js instalado
+- NSSM (https://nssm.cc/download)
+
+Configuración básica
+- Application: ruta a `node.exe`
+- Arguments: `node_modules\next\dist\bin\next start -p 9002`
+- Startup directory: raíz del proyecto
+- Variables de entorno: configurar en el panel de NSSM o usar `.env`.
+
+Inicia el servicio y verifica en http://localhost:9002
 
 ## Crear el primer usuario administrador 👤
 
@@ -304,6 +379,13 @@ docker compose up -d
 - Fuerza HTTPS y `SESSION_COOKIE_SECURE=true` en `.env`.
 - Revisa cabeceras de seguridad en el proxy: HSTS, X-Frame-Options, CSP según necesidades.
 - Limita orígenes de imágenes si hospedas contenido externo.
+
+### Checklist rápido (Docker)
+- [ ] `.env` completo con DB_HOST/DB_USER/DB_PASSWORD/DB_NAME y `DB_TYPE=SQLServer`.
+- [ ] SQL Server accesible desde el contenedor (firewall/reglas de red) y puerto 1433 abierto.
+- [ ] `docker compose up -d` sin errores y `docker compose logs -f web` saludable.
+- [ ] Acceso a http://localhost:9002 operativo.
+- [ ] (Si LAN) Regla de firewall en Windows creada para el puerto 9002.
 
 ## Notas de arquitectura y seguridad
 

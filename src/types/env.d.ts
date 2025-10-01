@@ -5,6 +5,7 @@ declare namespace NodeJS {
   interface ProcessEnv {
     NEXT_PUBLIC_COMPANY_NAME?: string;
     NEXT_PUBLIC_COMPANY_LOGO_URL?: string;
+    NEXT_PUBLIC_VOUCHER_MAX_PER_FUELING?: string;
   }
 }
 

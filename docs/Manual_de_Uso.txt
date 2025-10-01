@@ -1,0 +1,204 @@
+FleetFox – Manual de Uso (v1.0)
+Fecha: 2025-10-01
+
+RESUMEN
+FleetFox es una aplicación web para gestionar una flota vehicular: vehículos, mantenimientos, combustible, usuarios, alertas e informes con análisis detallado. Este manual explica cómo iniciar sesión, navegar por los módulos, registrar información, exportar datos y, sobre todo, cómo interpretar los informes. Incluye una sección para el uso móvil de registro de combustible.
+
+REQUISITOS BÁSICOS
+- Navegador moderno (Chrome, Edge o Firefox actualizados).
+- Usuario y contraseña válidos creados por el administrador.
+- Conexión a la base de datos configurada por TI para ver datos reales.
+
+ACCESO Y SEGURIDAD
+- Ingreso: dirígete a la URL provista por tu empresa y accede con tu correo y contraseña.
+- Sesiones: la sesión se guarda en una cookie segura; al expirar deberás iniciar sesión nuevamente.
+- Roles y permisos:
+  - Admin: acceso total a todos los módulos y configuraciones.
+  - Standard: acceso limitado según permisos asignados (por ejemplo: /vehicles, /maintenance, /fueling, /fueling-mobile, /reports, /alerts, /users, /settings).
+  - Acceso denegado: si no cuentas con permiso para una sección verás la página “Prohibido”. Contacta a tu administrador.
+
+NAVEGACIÓN GENERAL
+- Menú lateral: muestra los módulos principales (Panel, Vehículos, Mantenimiento, Combustible, Informes, Alertas, Usuarios, Configuración). Solo verás lo que tu rol permite.
+- Encabezado: accesos de sesión y utilidades.
+- Botón Imprimir: presente en la mayoría de informes; imprime la sección principal con diseño optimizado.
+- Exportaciones: muchos listados e informes permiten exportar a CSV o Excel (XLSX).
+
+MÓDULO: VEHÍCULOS
+Objetivo: Administrar el catálogo de vehículos.
+Acciones típicas:
+- Crear/editar vehículo: matrícula, VIN, marca, modelo, año, tipo de combustible, kilometraje actual, programación de próximo mantenimiento preventivo (fecha y km) y estado (Activo, En Taller, Inactivo).
+- Activar/Inactivar: para controlar la disponibilidad en la operación diaria.
+- Exportar: listado a Excel con campos clave.
+Buenas prácticas:
+- Mantén actualizado el kilometraje actual para que los informes y alertas sean más precisos.
+- Completa los campos de “Próx. mantenimiento (fecha y km)” para habilitar alertas preventivas y el reporte de mantenimiento próximo.
+
+MÓDULO: COMBUSTIBLE
+Objetivo: Registrar cargas de combustible y controlar costos/eficiencia.
+Registrar una carga (web o móvil):
+- Vehículo (obligatorio).
+- Fecha de carga (no puede ser futura).
+- Kilometraje en la carga (km).
+- Cantidad (litros) y costo por litro; el costo total se calcula automáticamente y puedes ajustarlo si es necesario.
+- Estación de servicio y Responsable (obligatorios).
+- Vouchers/fotos del recibo (opcional): puedes adjuntar varias imágenes. La app comprime las fotos automáticamente y permite rotarlas antes de guardar. Existe un límite máximo por registro definido por configuración.
+Listados y filtros:
+- Puedes filtrar por fechas y vehículo, y exportar los resultados a CSV/XLSX.
+Consejos:
+- Registra siempre el kilometraje real para que la eficiencia y costo por km sean correctos.
+- Adjunta fotos de recibos para auditoría y control.
+
+MÓDULO: MANTENIMIENTO
+Objetivo: Gestionar mantenimientos preventivos y correctivos.
+Registrar mantenimiento:
+- Vehículo (obligatorio).
+- Tipo: Preventivo o Correctivo.
+- Fecha de ejecución (no futura) y Kilometraje en servicio.
+- Actividades realizadas (detalle), Costo y Proveedor.
+- Para Preventivo: programa el siguiente mantenimiento por fecha y por kilometraje (ambos campos ayudan a las alertas y al reporte de “Mantenimiento Próximo”).
+- Adjuntos (opcional): facturas, fotos o documentos. Puedes agregar múltiples archivos y eliminar existentes durante la edición.
+Listados y exportaciones:
+- Listar, ver detalle y exportar a XLSX. Algunos listados incluyen columnas de auditoría (creado/actualizado por) si están disponibles.
+Buenas prácticas:
+- Describe claramente las actividades realizadas para consultas futuras.
+- Usa proveedores consistentes para facilitar análisis por proveedor.
+
+MÓDULO: ALERTAS
+Objetivo: Visibilidad de eventos que requieren atención.
+Tipos típicos de alerta (según configuración):
+- Mantenimiento preventivo próximo (por fecha o km).
+- Eficiencia de combustible baja.
+- Costo de mantenimiento elevado.
+- Vencimiento de documentos.
+Notas:
+- Desde el Panel (dashboard) los administradores pueden “Actualizar alertas” para recalcular el estado.
+- Las alertas nuevas y críticas se muestran priorizadas.
+
+MÓDULO: USUARIOS (Solo Admin)
+- Crear, editar, activar/desactivar y eliminar usuarios (con confirmación).
+- Asignar rol y permisos granulares por ruta (por ejemplo, habilitar solo el módulo móvil de combustible para kiosko).
+- Exportar usuarios a Excel para auditoría.
+
+MÓDULO: CONFIGURACIÓN
+- Valores generales de la aplicación (nombre/imagen de la empresa, moneda/locale).
+- Umbrales para alertas (p. ej., días y kilómetros para mantenimiento preventivo próximo).
+- Preferencias que afectan a informes y validaciones.
+
+INFORMES Y CÓMO INTERPRETARLOS
+Todos los informes comparten patrones comunes:
+- Rango de fechas: atajos rápidos (7, 30, 90 días, Mes actual, Mes anterior, Año en curso) y selector de rango.
+- Filtro por vehículo: selector simple o multiselección, según el reporte.
+- Exportar: CSV y/o Excel (XLSX). El Excel incluye formatos numéricos/moneda.
+- Imprimir: botón para impresión limpia.
+
+1) Informe de Consumo de Combustible (/reports/fuel-consumption)
+Qué muestra:
+- Resumen por vehículo del combustible consumido y su costo en el período.
+- KPIs globales: galones totales (y litros), costo total, eficiencia ponderada (km/gal), número de registros, kilómetros totales y costo por km.
+- Gráficos: comparación por vehículo (galones y costo) y eficiencia promedio por vehículo.
+Cómo interpretarlo:
+- Eficiencia ponderada (km/gal): rendimiento promedio considerando el peso de los galones consumidos; útil para comparar vehículos.
+- Costo/galón y Costo/km ayudan a identificar vehículos caros de operar.
+- Si no hay “KM recorridos”, es señal de que faltan registros consistentes de kilometraje.
+
+2) Informe de Costos de Mantenimiento (/reports/maintenance-costs)
+Qué muestra:
+- Costos preventivos vs. correctivos y total por vehículo.
+- Cantidad de registros en el período.
+- Gráfico comparativo por vehículo (preventivo vs. correctivo).
+Cómo interpretarlo:
+- Un alto costo correctivo relativo indica oportunidades de planificación preventiva.
+- Úsalo para presupuesto y control de gastos por vehículo.
+
+3) Informe de Costos Generales por Vehículo (/reports/overall-vehicle-costs)
+Qué muestra:
+- Consolidado por vehículo de costos de combustible y mantenimiento, y costo total general.
+- Gráfico comparativo de ambos costos por vehículo.
+Cómo interpretarlo:
+- Permite ver el “peso” de cada componente del gasto y priorizar acciones (ej. entrenar conductores o optimizar mantenimientos).
+
+4) Informe de Historial de Mantenimiento (/reports/maintenance-history)
+Qué muestra:
+- Lista detallada de todos los mantenimientos realizados, con fecha, tipo, km, costo y proveedor.
+- Filtros por vehículo y rango de fechas.
+Cómo interpretarlo:
+- Ideal para auditorías, control de proveedores, y verificar cumplimiento de planes.
+- Exporta a Excel para compartir con contabilidad o jefaturas.
+
+5) Informe de Mantenimiento Próximo (/reports/upcoming-maintenance)
+Qué muestra:
+- Vehículos que se acercan a su mantenimiento preventivo, por fecha y/o por km.
+- Umbrales configurables (por ejemplo, en los próximos 30 días o 2,000 km).
+- Columna “Alerta por”: Fecha, Kilometraje o Ambos.
+- Acciones: Crear mantenimiento directamente para un vehículo listado (prellena datos básicos en el formulario).
+Cómo interpretarlo:
+- Priorización: atiende primero “Ambos”, luego el que esté más próximo por días o km (mira “Días restantes” y “Km restantes”).
+
+6) Análisis de Eficiencia de Combustible (/reports/fuel-efficiency-analysis)
+Qué muestra:
+- Para cada vehículo: eficiencia promedio, mínima y máxima (km/gal), km recorridos y número de registros.
+- KPIs globales: eficiencia ponderada, km, galones y costo por km (del período).
+- Insights automáticos: top 3 en eficiencia, mayor recorrido con buena eficiencia, prioridad de revisión (alto km con baja eficiencia).
+- Gráficos: barras comparativas e incluso un gráfico de dispersión (Eficiencia vs. Km recorridos) con referencias promedio.
+Cómo interpretarlo:
+- Usa “Prioridad de revisión” para planear diagnósticos en vehículos con uso intensivo y bajo rendimiento.
+- El dispersión ayuda a reconocer outliers de alto recorrido con mala eficiencia.
+
+7) Informe Comparativo de Gastos (/reports/comparative-expense-analysis)
+Qué muestra:
+- Resumen general de costos de mantenimiento y combustible, galones, kilómetros, costo por km y eficiencia promedio.
+- Desglose por vehículo (cuando aplican múltiples) y múltiples tendencias mensuales: costos, costo por km, eficiencia y km recorridos.
+- Filtros: multiselección de vehículos y “Tipo de gasto” (todos, solo mantenimiento o solo combustible).
+Cómo interpretarlo:
+- Costo por km (general y mensual) es un indicador central para comparar periodos y vehículos.
+- La eficiencia mensual apoya el seguimiento de mejoras o deterioros por prácticas de conducción o condiciones de operación.
+
+EXPORTACIONES Y FORMATO DE DATOS
+- CSV: compatible con Excel, Google Sheets y sistemas contables. Asegúrate de configurar separador “,” en tu herramienta si corresponde.
+- Excel (XLSX): columnas con formato, cabeceras claras y hojas separadas cuando el reporte lo requiere.
+- Notas: Las cifras de moneda usan la moneda configurada por la empresa (por ejemplo, C$). El formato visual puede variar según la configuración regional.
+
+IMPRESIÓN DE INFORMES
+- Botón “Imprimir”: genera una salida limpia de la sección principal del informe (áreas marcadas como imprimibles). Revisa la vista previa antes de confirmar.
+
+USO MÓVIL – REGISTRO DE COMBUSTIBLE
+Ruta: /fueling/mobile
+Objetivo: Registrar cargas de combustible rápida y sencillamente desde dispositivos móviles (modo kiosko o en campo).
+Pantalla principal (últimos 7 días):
+- Lista de cargas recientes con matrícula, fecha, litros y costo.
+- Botón “Registrar” para crear una nueva carga.
+Registrar nueva carga (móvil):
+- Mismos campos que en web (vehículo, fecha no futura, km, litros, costo por litro, total, estación y responsable).
+- Cámara/galería: puedes tomar o seleccionar fotos del recibo; las imágenes se comprimen automáticamente para mejorar el envío y almacenamiento.
+- Previsualización y rotación: antes de guardar, puedes eliminar o rotar fotos si quedaron de lado.
+Permisos:
+- Requiere el permiso /fueling-mobile o perfil Admin. En kioskos, se puede asignar un alcance de permiso reducido para uso exclusivo del módulo móvil.
+Recomendaciones:
+- Asegura buena iluminación para que los recibos sean legibles.
+- Verifica el vehículo seleccionado antes de guardar.
+
+BUENAS PRÁCTICAS Y CONSEJOS
+- Datos consistentes: registra y valida kilometraje; evita fechas futuras en cargas o mantenimientos.
+- Preventivo vs. Correctivo: prioriza la planificación preventiva para reducir costos correctivos.
+- Control de costos: revisa mensualmente “Costo por km” y “Eficiencia” para detectar desviaciones.
+- Auditoría: adjunta vouchers y documentos clave; exporta a Excel para respaldos y revisiones.
+
+RESOLUCIÓN DE PROBLEMAS (FAQ)
+1) “No puedo acceder a una sección” → No tienes permiso. Contacta a tu administrador para habilitar la ruta correspondiente.
+2) “No veo datos en los informes” → Verifica el rango de fechas, filtros de vehículo y que la conexión a BD esté activa. Comprueba que existan registros.
+3) “Los costos/eficiencia se ven raros” → Asegúrate de registrar km y cantidades correctamente; revisa outliers (cargas con km igual o menor al anterior).
+4) “No se suben las fotos del voucher” → Reduce tamaño/calidad. La app comprime automáticamente, pero existe un límite por archivo/cantidad.
+5) “Exporté a CSV y se ven caracteres extraños” → Define la codificación UTF-8 y el separador coma en tu herramienta.
+
+SOPORTE Y CONTACTO
+- Equipo de TI/Administración de FleetFox en tu empresa.
+- Incluye: URL del sistema, fecha/hora del incidente, usuario, módulo afectado y capturas de pantalla o archivos exportados si es posible.
+
+ANEXO – GLOSARIO RÁPIDO
+- KM/gal: Kilómetros recorridos por galón; medida de eficiencia de combustible.
+- Costo por km: Costo total dividido entre km recorridos.
+- Preventivo: Mantenimiento planificado por fecha o kilometraje.
+- Correctivo: Mantenimiento realizado por falla o condición no planificada.
+- Voucher: Foto o documento del recibo/factura adjunto a un registro.
+
+FIN DEL DOCUMENTO
